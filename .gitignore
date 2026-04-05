@@ -1,1 +1,4 @@
 auto-push.js
+.env
+node_modules/*
+.gitignore
