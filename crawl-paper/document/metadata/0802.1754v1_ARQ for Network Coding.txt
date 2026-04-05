@@ -1,0 +1,11 @@
+Tiêu đề bài báo: ARQ for Network Coding
+Tác giả: Jay Kumar Sundararajan, Devavrat Shah, Muriel Médard
+Ngày xuất bản: 2008-02-13
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/0802.1754v1
+Link PDF: https://arxiv.org/pdf/0802.1754v1.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/0802.1754v1_ARQ%20for%20Network%20Coding.pdf
+Chủ đề Crawler: ARQ
+
+--- TÓM TẮT (ABSTRACT) ---
+A new coding and queue management algorithm is proposed for communication networks that employ linear network coding. The algorithm has the feature that the encoding process is truly online, as opposed to a block-by-block approach. The setup assumes a packet erasure broadcast channel with stochastic arrivals and full feedback, but the proposed scheme is potentially applicable to more general lossy networks with link-by-link feedback. The algorithm guarantees that the physical queue size at the sender tracks the backlog in degrees of freedom (also called the virtual queue size). The new notion of a node "seeing" a packet is introduced. In terms of this idea, our algorithm may be viewed as a natural extension of ARQ schemes to coded networks. Our approach, known as the drop-when-seen algorithm, is compared with a baseline queuing approach called drop-when-decoded. It is shown that the expected queue size for our approach is $O(\frac1{1-ρ})$ as opposed to $Ω(\frac1{(1-ρ)^2})$ for the baseline approach, where $ρ$ is the load factor.

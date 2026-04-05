@@ -1,0 +1,11 @@
+Tiêu đề bài báo: Multiple-Description Lattice Vector Quantization
+Tác giả: Jan Ostergaard
+Ngày xuất bản: 2007-07-17
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/0707.2482v1
+Link PDF: https://arxiv.org/pdf/0707.2482v1.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/0707.2482v1_Multiple-Description%20Lattice%20Vector%20Quantization.pdf
+Chủ đề Crawler: PQ
+
+--- TÓM TẮT (ABSTRACT) ---
+In this thesis, we construct and analyze multiple-description codes based on lattice vector quantization.

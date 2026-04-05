@@ -1,0 +1,11 @@
+Tiêu đề bài báo: ARQ: A Mixed-Precision Quantization Framework for Accurate and Certifiably Robust DNNs
+Tác giả: Yuchen Yang, Shubham Ugare, Yifan Zhao, Gagandeep Singh, Sasa Misailovic
+Ngày xuất bản: 2024-10-31
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/2410.24214v2
+Link PDF: https://arxiv.org/pdf/2410.24214v2.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/2410.24214v2_ARQ-%20A%20Mixed-Precision%20Quantization%20Framework%20for%20.pdf
+Chủ đề Crawler: ARQ
+
+--- TÓM TẮT (ABSTRACT) ---
+Mixed precision quantization has become an important technique for optimizing the execution of deep neural networks (DNNs). Certified robustness, which provides provable guarantees about a model's ability to withstand different adversarial perturbations, has rarely been addressed in quantization due to unacceptably high cost of certifying robustness. This paper introduces ARQ, an innovative mixed-precision quantization method that not only preserves the clean accuracy of the smoothed classifiers but also maintains their certified robustness. ARQ uses reinforcement learning to find accurate and robust DNN quantization, while efficiently leveraging randomized smoothing, a popular class of statistical DNN verification algorithms. ARQ consistently performs better than multiple state-of-the-art quantization techniques across all the benchmarks and the input perturbation levels. The performance of ARQ quantized networks reaches that of the original DNN with floating-point weights, but with only 1.5% instructions and the highest certified radius. ARQ code is available at https://anonymous.4open.science/r/ARQ-FE4B.

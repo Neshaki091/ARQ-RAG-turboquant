@@ -1,0 +1,11 @@
+Tiêu đề bài báo: Random projection trees for vector quantization
+Tác giả: Sanjoy Dasgupta, Yoav Freund
+Ngày xuất bản: 2008-05-09
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/0805.1390v1
+Link PDF: https://arxiv.org/pdf/0805.1390v1.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/0805.1390v1_Random%20projection%20trees%20for%20vector%20quantization.pdf
+Chủ đề Crawler: PQ
+
+--- TÓM TẮT (ABSTRACT) ---
+A simple and computationally efficient scheme for tree-structured vector quantization is presented. Unlike previous methods, its quantization error depends only on the intrinsic dimension of the data distribution, rather than the apparent dimension of the space in which the data happen to lie.

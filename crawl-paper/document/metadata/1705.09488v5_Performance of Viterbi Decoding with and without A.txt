@@ -1,0 +1,11 @@
+Tiêu đề bài báo: Performance of Viterbi Decoding with and without ARQ on Rician Fading Channels
+Tác giả: Lan V. Truong
+Ngày xuất bản: 2017-05-26
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/1705.09488v5
+Link PDF: https://arxiv.org/pdf/1705.09488v5.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/1705.09488v5_Performance%20of%20Viterbi%20Decoding%20with%20and%20without%20A.pdf
+Chủ đề Crawler: ARQ
+
+--- TÓM TẮT (ABSTRACT) ---
+In this paper, we investigate the performance of the Viterbi decoding algorithm with/without Automatic Repeat reQuest (ARQ) over a Rician flat fading channel with unlimited interleaving. We show that the decay rate of the average bit error probability with respect to the bit energy to noise ratio is at least equal to $d_f$ at high bit energy to noise ratio for both cases (with ARQ and without ARQ), where $d_f$ is the free distance of the convolutional code. The Yamamoto-Itoh flag helps to reduce the average bit error probability by a factor of $4^{d_f}$ with a negligible retransmission rate. We also prove an interesting result that the average bit error probability decays exponentially fast with respect to the Rician factor for any fixed bit energy per noise ratio. In addition, the average bit error exponent with respect to the Rician factor is shown to be $d_f$.

@@ -1,0 +1,11 @@
+Tiêu đề bài báo: A review of learning vector quantization classifiers
+Tác giả: David Nova, Pablo A. Estevez
+Ngày xuất bản: 2015-09-23
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/1509.07093v1
+Link PDF: https://arxiv.org/pdf/1509.07093v1.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/1509.07093v1_A%20review%20of%20learning%20vector%20quantization%20classifie.pdf
+Chủ đề Crawler: PQ
+
+--- TÓM TẮT (ABSTRACT) ---
+In this work we present a review of the state of the art of Learning Vector Quantization (LVQ) classifiers. A taxonomy is proposed which integrates the most relevant LVQ approaches to date. The main concepts associated with modern LVQ approaches are defined. A comparison is made among eleven LVQ classifiers using one real-world and two artificial datasets.

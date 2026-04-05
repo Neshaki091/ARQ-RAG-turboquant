@@ -1,0 +1,27 @@
+Tiêu đề bài báo: A Novel and Efficient Vector Quantization Based CPRI Compression Algorithm
+Tác giả: Hongbo Si</name>
+      <arxiv:affiliation>Charlie</arxiv:affiliation>
+    </author>
+    <author>
+      <name>Boon Loong Ng</name>
+      <arxiv:affiliation>Charlie</arxiv:affiliation>
+    </author>
+    <author>
+      <name>Md. Saifur Rahman</name>
+      <arxiv:affiliation>Charlie</arxiv:affiliation>
+    </author>
+    <author>
+      <name> Jianzhong</name>
+      <arxiv:affiliation>Charlie</arxiv:affiliation>
+    </author>
+    <author>
+      <name> Zhang
+Ngày xuất bản: 2015-10-16
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/1510.04940v1
+Link PDF: https://arxiv.org/pdf/1510.04940v1.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/1510.04940v1_A%20Novel%20and%20Efficient%20Vector%20Quantization%20Based%20CP.pdf
+Chủ đề Crawler: PQ
+
+--- TÓM TẮT (ABSTRACT) ---
+The future wireless network, such as Centralized Radio Access Network (C-RAN), will need to deliver data rate about 100 to 1000 times the current 4G technology. For C-RAN based network architecture, there is a pressing need for tremendous enhancement of the effective data rate of the Common Public Radio Interface (CPRI). Compression of CPRI data is one of the potential enhancements. In this paper, we introduce a vector quantization based compression algorithm for CPRI links, utilizing Lloyd algorithm. Methods to vectorize the I/Q samples and enhanced initialization of Lloyd algorithm for codebook training are investigated for improved performance. Multi-stage vector quantization and unequally protected multi-group quantization are considered to reduce codebook search complexity and codebook size. Simulation results show that our solution can achieve compression of 4 times for uplink and 4.5 times for downlink, within 2% Error Vector Magnitude (EVM) distortion. Remarkably, vector quantization codebook proves to be quite robust against data modulation mismatch, fading, signal-to-noise ratio (SNR) and Doppler spread.

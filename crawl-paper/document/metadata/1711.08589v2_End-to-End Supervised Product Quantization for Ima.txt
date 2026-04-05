@@ -1,0 +1,11 @@
+Tiêu đề bài báo: End-to-End Supervised Product Quantization for Image Search and Retrieval
+Tác giả: Benjamin Klein, Lior Wolf
+Ngày xuất bản: 2017-11-23
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/1711.08589v2
+Link PDF: https://arxiv.org/pdf/1711.08589v2.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/1711.08589v2_End-to-End%20Supervised%20Product%20Quantization%20for%20Ima.pdf
+Chủ đề Crawler: PQ
+
+--- TÓM TẮT (ABSTRACT) ---
+Product Quantization, a dictionary based hashing method, is one of the leading unsupervised hashing techniques. While it ignores the labels, it harnesses the features to construct look up tables that can approximate the feature space. In recent years, several works have achieved state of the art results on hashing benchmarks by learning binary representations in a supervised manner. This work presents Deep Product Quantization (DPQ), a technique that leads to more accurate retrieval and classification than the latest state of the art methods, while having similar computational complexity and memory footprint as the Product Quantization method. To our knowledge, this is the first work to introduce a dictionary-based representation that is inspired by Product Quantization and which is learned end-to-end, and thus benefits from the supervised signal. DPQ explicitly learns soft and hard representations to enable an efficient and accurate asymmetric search, by using a straight-through estimator. Our method obtains state of the art results on an extensive array of retrieval and classification experiments.

@@ -1,0 +1,11 @@
+Tiêu đề bài báo: Increasing Physical Layer Security through Scrambled Codes and ARQ
+Tác giả: Marco Baldi, Marco Bianchi, Franco Chiaraluce
+Ngày xuất bản: 2011-09-05
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/1109.0908v1
+Link PDF: https://arxiv.org/pdf/1109.0908v1.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/1109.0908v1_Increasing%20Physical%20Layer%20Security%20through%20Scrambl.pdf
+Chủ đề Crawler: ARQ
+
+--- TÓM TẮT (ABSTRACT) ---
+We develop the proposal of non-systematic channel codes on the AWGN wire-tap channel. Such coding technique, based on scrambling, achieves high transmission security with a small degradation of the eavesdropper's channel with respect to the legitimate receiver's channel. In this paper, we show that, by implementing scrambling and descrambling on blocks of concatenated frames, rather than on single frames, the channel degradation needed is further reduced. The usage of concatenated scrambling allows to achieve security also when both receivers experience the same channel quality. However, in this case, the introduction of an ARQ protocol with authentication is needed.

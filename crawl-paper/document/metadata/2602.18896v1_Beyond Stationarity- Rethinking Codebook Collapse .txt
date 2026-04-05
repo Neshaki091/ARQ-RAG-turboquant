@@ -1,0 +1,11 @@
+Tiêu đề bài báo: Beyond Stationarity: Rethinking Codebook Collapse in Vector Quantization
+Tác giả: Hao Lu, Onur C. Koyun, Yongxin Guo, Zhengjie Zhu, Abbas Alili, Metin Nafi Gurcan
+Ngày xuất bản: 2026-02-21
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/2602.18896v1
+Link PDF: https://arxiv.org/pdf/2602.18896v1.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/2602.18896v1_Beyond%20Stationarity-%20Rethinking%20Codebook%20Collapse%20.pdf
+Chủ đề Crawler: PQ
+
+--- TÓM TẮT (ABSTRACT) ---
+Vector Quantization (VQ) underpins many modern generative frameworks such as VQ-VAE, VQ-GAN, and latent diffusion models. Yet, it suffers from the persistent problem of codebook collapse, where a large fraction of code vectors remains unused during training. This work provides a new theoretical explanation by identifying the nonstationary nature of encoder updates as the fundamental cause of this phenomenon. We show that as the encoder drifts, unselected code vectors fail to receive updates and gradually become inactive. To address this, we propose two new methods: Non-Stationary Vector Quantization (NSVQ), which propagates encoder drift to non-selected codes through a kernel-based rule, and Transformer-based Vector Quantization (TransVQ), which employs a lightweight mapping to adaptively transform the entire codebook while preserving convergence to the k-means solution. Experiments on the CelebA-HQ dataset demonstrate that both methods achieve near-complete codebook utilization and superior reconstruction quality compared to baseline VQ variants, providing a principled and scalable foundation for future VQ-based generative models. The code is available at: https://github.com/CAIR- LAB- WFUSM/NSVQ-TransVQ.git

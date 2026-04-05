@@ -1,0 +1,11 @@
+Tiêu đề bài báo: Greedy vector quantization
+Tác giả: Harald Luschgy, Gilles Pagès
+Ngày xuất bản: 2014-09-02
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/1409.0732v2
+Link PDF: https://arxiv.org/pdf/1409.0732v2.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/1409.0732v2_Greedy%20vector%20quantization.pdf
+Chủ đề Crawler: PQ
+
+--- TÓM TẮT (ABSTRACT) ---
+We investigate the greedy version of the $L^p$-optimal vector quantization problem for an $\mathbb{R}^d$-valued random vector $X\!\in L^p$. We show the existence of a sequence $(a_N)_{N\ge 1}$ such that $a_N$ minimizes $a\mapsto\big \|\min_{1\le i\le N-1}|X-a_i|\wedge |X-a|\big\|_{L^p}$ ($L^p$-mean quantization error at level $N$ induced by $(a_1,\ldots,a_{N-1},a)$). We show that this sequence produces $L^p$-rate optimal $N$-tuples $a^{(N)}=(a_1,\ldots,a_{_N})$ ($i.e.$ the $L^p$-mean quantization error at level $N$ induced by $a^{(N)}$ goes to $0$ at rate $N^{-\frac 1d}$). Greedy optimal sequences also satisfy, under natural additional assumptions, the distortion mismatch property: the $N$-tuples $a^{(N)}$ remain rate optimal with respect to the $L^q$-norms, $p\le q &lt;p+d$. Finally, we propose optimization methods to compute greedy sequences, adapted from usual Lloyd's I and Competitive Learning Vector Quantization procedures, either in their deterministic (implementable when $d=1$) or stochastic versions.

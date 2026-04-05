@@ -1,0 +1,11 @@
+Tiêu đề bài báo: Diffusion Product Quantization
+Tác giả: Jie Shao, Hanxiao Zhang, Jianxin Wu
+Ngày xuất bản: 2024-11-19
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/2411.12306v1
+Link PDF: https://arxiv.org/pdf/2411.12306v1.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/2411.12306v1_Diffusion%20Product%20Quantization.pdf
+Chủ đề Crawler: PQ
+
+--- TÓM TẮT (ABSTRACT) ---
+In this work, we explore the quantization of diffusion models in extreme compression regimes to reduce model size while maintaining performance. We begin by investigating classical vector quantization but find that diffusion models are particularly susceptible to quantization error, with the codebook size limiting generation quality. To address this, we introduce product quantization, which offers improved reconstruction precision and larger capacity -- crucial for preserving the generative capabilities of diffusion models. Furthermore, we propose a method to compress the codebook by evaluating the importance of each vector and removing redundancy, ensuring the model size remaining within the desired range. We also introduce an end-to-end calibration approach that adjusts assignments during the forward pass and optimizes the codebook using the DDPM loss. By compressing the model to as low as 1 bit (resulting in over 24 times reduction in model size), we achieve a balance between compression and quality. We apply our compression method to the DiT model on ImageNet and consistently outperform other quantization approaches, demonstrating competitive generative performance.

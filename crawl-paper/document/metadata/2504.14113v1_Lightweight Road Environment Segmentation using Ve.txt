@@ -1,0 +1,11 @@
+Tiêu đề bài báo: Lightweight Road Environment Segmentation using Vector Quantization
+Tác giả: Jiyong Kwag, Alper Yilmaz, Charles Toth
+Ngày xuất bản: 2025-04-19
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/2504.14113v1
+Link PDF: https://arxiv.org/pdf/2504.14113v1.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/2504.14113v1_Lightweight%20Road%20Environment%20Segmentation%20using%20Ve.pdf
+Chủ đề Crawler: PQ
+
+--- TÓM TẮT (ABSTRACT) ---
+Road environment segmentation plays a significant role in autonomous driving. Numerous works based on Fully Convolutional Networks (FCNs) and Transformer architectures have been proposed to leverage local and global contextual learning for efficient and accurate semantic segmentation. In both architectures, the encoder often relies heavily on extracting continuous representations from the image, which limits the ability to represent meaningful discrete information. To address this limitation, we propose segmentation of the autonomous driving environment using vector quantization. Vector quantization offers three primary advantages for road environment segmentation. (1) Each continuous feature from the encoder is mapped to a discrete vector from the codebook, helping the model discover distinct features more easily than with complex continuous features. (2) Since a discrete feature acts as compressed versions of the encoder's continuous features, they also compress noise or outliers, enhancing the image segmentation task. (3) Vector quantization encourages the latent space to form coarse clusters of continuous features, forcing the model to group similar features, making the learned representations more structured for the decoding process. In this work, we combined vector quantization with the lightweight image segmentation model MobileUNETR and used it as a baseline model for comparison to demonstrate its efficiency. Through experiments, we achieved 77.0 % mIoU on Cityscapes, outperforming the baseline by 2.9 % without increasing the model's initial size or complexity.

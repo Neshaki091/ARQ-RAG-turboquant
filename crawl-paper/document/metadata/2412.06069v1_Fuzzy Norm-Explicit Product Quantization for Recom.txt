@@ -1,0 +1,11 @@
+Tiêu đề bài báo: Fuzzy Norm-Explicit Product Quantization for Recommender Systems
+Tác giả: Mohammadreza Jamalifard, Javier Andreu-Perez, Hani Hagras, Luis Martínez López
+Ngày xuất bản: 2024-12-08
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/2412.06069v1
+Link PDF: https://arxiv.org/pdf/2412.06069v1.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/2412.06069v1_Fuzzy%20Norm-Explicit%20Product%20Quantization%20for%20Recom.pdf
+Chủ đề Crawler: PQ
+
+--- TÓM TẮT (ABSTRACT) ---
+As the data resources grow, providing recommendations that best meet the demands has become a vital requirement in business and life to overcome the information overload problem. However, building a system suggesting relevant recommendations has always been a point of debate. One of the most cost-efficient techniques in terms of producing relevant recommendations at a low complexity is Product Quantization (PQ). PQ approaches have continued developing in recent years. This system's crucial challenge is improving product quantization performance in terms of recall measures without compromising its complexity. This makes the algorithm suitable for problems that require a greater number of potentially relevant items without disregarding others, at high-speed and low-cost to keep up with traffic. This is the case of online shops where the recommendations for the purpose are important, although customers can be susceptible to scoping other products. This research proposes a fuzzy approach to perform norm-based product quantization. Type-2 Fuzzy sets (T2FSs) define the codebook allowing sub-vectors (T2FSs) to be associated with more than one element of the codebook, and next, its norm calculus is resolved by means of integration. Our method finesses the recall measure up, making the algorithm suitable for problems that require querying at most possible potential relevant items without disregarding others. The proposed method outperforms all PQ approaches such as NEQ, PQ, and RQ up to +6%, +5%, and +8% by achieving a recall of 94%, 69%, 59% in Netflix, Audio, Cifar60k datasets, respectively. More and over, computing time and complexity nearly equals the most computationally efficient existing PQ method in the state-of-the-art.

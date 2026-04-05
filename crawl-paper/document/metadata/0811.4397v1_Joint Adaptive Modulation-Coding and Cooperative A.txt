@@ -1,0 +1,11 @@
+Tiêu đề bài báo: Joint Adaptive Modulation-Coding and Cooperative ARQ for Wireless Relay Networks
+Tác giả: Morteza Mardani, Jalil S. Harsini, Farshad Lahouti, Behrouz Eliasi
+Ngày xuất bản: 2008-11-26
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/0811.4397v1
+Link PDF: https://arxiv.org/pdf/0811.4397v1.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/0811.4397v1_Joint%20Adaptive%20Modulation-Coding%20and%20Cooperative%20A.pdf
+Chủ đề Crawler: ARQ
+
+--- TÓM TẮT (ABSTRACT) ---
+This paper presents a cross-layer approach to jointly design adaptive modulation and coding (AMC) at the physical layer and cooperative truncated automatic repeat request (ARQ) protocol at the data link layer. We first derive an exact closed form expression for the spectral efficiency of the proposed joint AMC-cooperative ARQ scheme. Aiming at maximizing this system performance measure, we then optimize an AMC scheme which directly satisfies a prescribed packet loss rate constraint at the data-link layer. The results indicate that utilizing cooperative ARQ as a retransmission strategy, noticeably enhances the spectral efficiency compared with the system that employs AMC alone at the physical layer. Moreover, the proposed adaptive rate cooperative ARQ scheme outperforms the fixed rate counterpart when the transmission modes at the source and relay are chosen based on the channel statistics. This in turn quantifies the possible gain achieved by joint design of AMC and ARQ in wireless relay networks.

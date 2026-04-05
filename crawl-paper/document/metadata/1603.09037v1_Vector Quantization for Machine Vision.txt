@@ -1,0 +1,11 @@
+Tiêu đề bài báo: Vector Quantization for Machine Vision
+Tác giả: Vincenzo Liguori
+Ngày xuất bản: 2016-03-30
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/1603.09037v1
+Link PDF: https://arxiv.org/pdf/1603.09037v1.pdf
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/1603.09037v1_Vector%20Quantization%20for%20Machine%20Vision.pdf
+Chủ đề Crawler: PQ
+
+--- TÓM TẮT (ABSTRACT) ---
+This paper shows how to reduce the computational cost for a variety of common machine vision tasks by operating directly in the compressed domain, particularly in the context of hardware acceleration. Pyramid Vector Quantization (PVQ) is the compression technique of choice and its properties are exploited to simplify Support Vector Machines (SVM), Convolutional Neural Networks(CNNs), Histogram of Oriented Gradients (HOG) features, interest points matching and other algorithms.
