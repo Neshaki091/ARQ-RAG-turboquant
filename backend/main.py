@@ -5,13 +5,38 @@ from pydantic import BaseModel
 import os
 import logging
 import json
+import time
 import numpy as np
 from ingest import IngestionManager
-from embed import EmbeddingManager
+from shared.embed import EmbeddingManager
 from benchmark import BenchmarkManager
 from export_excel import export_to_excel
-from supabase_client import SupabaseManager
-from vector_store import VectorStoreManager
+from shared.supabase_client import SupabaseManager
+from shared.vector_store import VectorStoreManager
+
+from collections import deque
+ui_log_queue = deque(maxlen=100)
+
+class UILogHandler(logging.Handler):
+    def emit(self, record):
+        if "uvicorn" in record.name or "/status" in str(record.msg): return
+        msg = self.format(record)
+        ui_log_queue.append(msg)
+
+ui_handler = UILogHandler()
+ui_handler.setFormatter(logging.Formatter("%(asctime)s | %(name)s | %(message)s", datefmt="%H:%M:%S"))
+
+# ── Cấu hình Logging cho tất cả model retrieval ──
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(name)-15s | %(levelname)s | %(message)s",
+    datefmt="%H:%M:%S"
+)
+# Đảm bảo tất cả logger của các model handler đều hiển thị
+for _logger_name in ["RAG-RAW", "RAG-PQ", "RAG-SQ8", "RAG-Adaptive", "ARQ-RAG", "SharedRAG", "VectorStore"]:
+    logger = logging.getLogger(_logger_name)
+    logger.setLevel(logging.INFO)
+    logger.addHandler(ui_handler)
 
 class EndpointFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
@@ -40,8 +65,10 @@ state = {
     "ingest_total": 0,
     "embed_current": 0,
     "embed_total": 0,
+    "benchmark_cursor": 0,
     "last_error": None,
-    "excel_url": None
+    "excel_url": None,
+    "last_latency": 0
 }
 
 class IngestRequest(BaseModel):
@@ -50,9 +77,23 @@ class IngestRequest(BaseModel):
 class PurgeRequest(BaseModel):
     secret_key: str
 
+class BenchmarkRequest(BaseModel):
+    batch_size: int = 20
+
+import psutil
+
 @app.get("/status")
 async def get_status():
-    return state
+    process = psutil.Process(os.getpid())
+    process_ram_mb = process.memory_info().rss / (1024 * 1024)
+    virtual_mem = psutil.virtual_memory()
+    sys_ram_mb = virtual_mem.used / (1024 * 1024)
+    return {
+        **state,
+        "ram_usage": round(process_ram_mb, 2),
+        "sys_ram_usage": round(sys_ram_mb, 2),
+        "logs": list(ui_log_queue)
+    }
 
 @app.get("/pdfs")
 async def list_pdfs():
@@ -94,13 +135,12 @@ async def run_embed(background_tasks: BackgroundTasks):
             em = EmbeddingManager()
             chunks, embeddings = em.run_embedding()
             
-            # Đã thêm: Đồng bộ hóa với Qdrant ngay sau khi nhúng thành công
+            # Đã nâng cấp: Sử dụng IngestionManager để đồng bộ hóa mô hình (Modular)
             if chunks and embeddings is not None:
                 state["status"] = "INDEXING"
                 state["progress"] = 80
-                vm = VectorStoreManager()
-                vm.initialize_collections()
-                vm.upsert_data(chunks, embeddings)
+                im = IngestionManager()
+                im.sync_to_qdrant(chunks, embeddings)
             
             state["status"] = "IDLE"
             state["progress"] = 100
@@ -128,7 +168,9 @@ async def purge_data(req: PurgeRequest):
         # 2. Xóa các tệp data phục vụ tính toán (giữ lại chunks và metadata)
         files_to_delete = [
             "data/embeddings.npy",
-            "data/centroids.npy"
+            "data/centroids.npy",
+            "data/chunks.json",
+            "data/metadata.json"
         ]
         
         for f in files_to_delete:
@@ -145,6 +187,7 @@ async def purge_data(req: PurgeRequest):
             "ingest_total": 0,
             "embed_current": 0,
             "embed_total": 0,
+            "benchmark_cursor": 0,
             "last_error": None,
             "excel_url": None
         }
@@ -154,7 +197,7 @@ async def purge_data(req: PurgeRequest):
         raise HTTPException(status_code=500, detail=f"Lỗi khi xóa dữ liệu: {str(e)}")
 
 @app.post("/run-benchmark")
-async def run_benchmark(background_tasks: BackgroundTasks):
+async def run_benchmark(req: BenchmarkRequest, background_tasks: BackgroundTasks):
     if state["status"] not in ["IDLE", "COMPLETED"]:
         raise HTTPException(status_code=400, detail="Hệ thống đang bận")
     
@@ -162,6 +205,8 @@ async def run_benchmark(background_tasks: BackgroundTasks):
     state["progress"] = 0
     
     def process():
+        import asyncio
+        from chat_service import ChatService
         try:
             # Load Data
             if not os.path.exists("data/chunks.json") or not os.path.exists("data/embeddings.npy"):
@@ -172,15 +217,24 @@ async def run_benchmark(background_tasks: BackgroundTasks):
             embeddings = np.load("data/embeddings.npy")
             
             bm = BenchmarkManager(embeddings, chunks)
-            results = bm.run_benchmark(num_test_sets=2, queries_per_set=5) # Giảm số lượng để demo nhanh
+            cs = ChatService()
             
-            # Export
-            file_path = export_to_excel(results)
+            batch_size = req.batch_size if req else 20
+            start_idx = state.get("benchmark_cursor", 0)
+            end_idx = start_idx + batch_size
             
-            # Upload to Supabase
+            # Since process is synchronous thread run by BackgroundTasks, we need asyncio loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            batch_file, cumulative_file = loop.run_until_complete(bm.run_batch(cs, start_idx=start_idx, end_idx=end_idx))
+            
+            # Update cursor and state
+            state["benchmark_cursor"] = end_idx
+            
+            # Upload the cumulative results to Supabase
             sm = SupabaseManager()
-            filename = f"benchmark_{int(time.time())}.xlsx"
-            sm.upload_file("benchmark-excel", filename, file_path)
+            filename = f"benchmark_cumulative_{start_idx}_to_{end_idx}_{int(time.time())}.xlsx"
+            sm.upload_file("benchmark-excel", filename, cumulative_file)
             state["excel_url"] = sm.get_public_url("benchmark-excel", filename)
             
             state["status"] = "COMPLETED"
@@ -188,6 +242,7 @@ async def run_benchmark(background_tasks: BackgroundTasks):
         except Exception as e:
             state["status"] = "IDLE"
             state["last_error"] = str(e)
+            print(f"Benchmark Error: {e}")
 
     background_tasks.add_task(process)
     return {"message": "Bắt đầu chạy benchmark..."}
@@ -196,17 +251,9 @@ from chat_service import ChatService
 
 class ChatRequest(BaseModel):
     query: str
-    model: str = "gemini"
+    model: str = "groq"
     collection: str = "vector_arq"
 
-@app.post("/chat")
-async def chat(req: ChatRequest):
-    try:
-        cs = ChatService()
-        result = await cs.chat(req.query, req.model, req.collection)
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/chat-stream")
 async def chat_stream(req: ChatRequest):
@@ -250,13 +297,11 @@ async def run_auto_pipeline(req: IngestRequest, background_tasks: BackgroundTask
             em = EmbeddingManager()
             chunks, embeddings = em.run_embedding(on_progress=on_embed)
             
-            # Step 3: Vector Store Ingest (Qdrant)
+            # Step 3: Vector Store Ingest (Qdrant) - Modular Sync
             if chunks and embeddings is not None:
                 state["status"] = "INDEXING"
                 state["progress"] = 70
-                vm = VectorStoreManager()
-                vm.initialize_collections()
-                vm.upsert_data(chunks, embeddings)
+                im.sync_to_qdrant(chunks, embeddings)
             
             state["status"] = "COMPLETED"
             state["progress"] = 100
@@ -267,6 +312,60 @@ async def run_auto_pipeline(req: IngestRequest, background_tasks: BackgroundTask
 
     background_tasks.add_task(process)
     return {"message": "Bắt đầu quy trình tự động (Chunk -> Embed -> Qdrant)..."}
+
+@app.post("/run-crawl")
+async def run_crawl(background_tasks: BackgroundTasks):
+    if state["status"] not in ["IDLE", "COMPLETED"]:
+        raise HTTPException(status_code=400, detail="Hệ thống đang bận")
+    
+    state["status"] = "CRAWLING" # Custom status for UI
+    state["progress"] = 0
+    
+    def process():
+        import subprocess
+        try:
+            print("🚀 Đang khởi chạy Crawler bài báo (Python Version)...")
+            result = subprocess.run(["python", "crawl_paper.py"], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("✅ Crawl thành công!")
+            else:
+                print(f"❌ Crawl lỗi: {result.stderr}")
+            state["status"] = "IDLE"
+            state["progress"] = 100
+        except Exception as e:
+            state["status"] = "IDLE"
+            state["last_error"] = str(e)
+            print(f"Crawl Process Error: {e}")
+
+    background_tasks.add_task(process)
+    return {"message": "Bắt đầu cào dữ liệu arXiv (Vui lòng theo dõi log)..."}
+
+@app.post("/run-generate-testset")
+async def run_generate_testset(background_tasks: BackgroundTasks):
+    if state["status"] not in ["IDLE", "COMPLETED"]:
+        raise HTTPException(status_code=400, detail="Hệ thống đang bận")
+    
+    state["status"] = "GENERATING_TESTSET"
+    state["progress"] = 0
+    
+    def process():
+        import subprocess
+        try:
+            print("🚀 Đang sinh bộ câu hỏi Ground Truth...")
+            result = subprocess.run(["python", "scripts/generate_testset.py"], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("✅ Đã sinh xong bộ testset nhân tạo!")
+            else:
+                print(f"❌ Lỗi sinh testset: {result.stderr}")
+            state["status"] = "IDLE"
+            state["progress"] = 100
+        except Exception as e:
+            state["status"] = "IDLE"
+            state["last_error"] = str(e)
+            print(f"Generate Testset error: {e}")
+
+    background_tasks.add_task(process)
+    return {"message": "Bắt đầu tạo câu hỏi chuẩn (Ground Truth)..."}
 
 if __name__ == "__main__":
     import uvicorn

@@ -51,7 +51,7 @@ class EmbeddingManager:
             print("Đang tiến hành embed lại từ đầu để đảm bảo tính nhất quán...")
             existing_embeddings = []
             start_idx = 0
-
+        
         print(f"Đang tiến hành embed từ index {start_idx}/{total}...")
         
         if on_progress:

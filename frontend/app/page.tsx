@@ -2,26 +2,27 @@
 
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { 
-  Activity, 
-  Database, 
-  Cpu, 
-  Download, 
-  Play, 
-  Layers, 
+import {
+  Activity,
+  Database,
+  Cpu,
+  Download,
+  Play,
+  Layers,
   AlertCircle,
   FileText,
   CheckCircle2,
   Loader2,
-  Trash2
+  Trash2,
+  Terminal
 } from "lucide-react";
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
   ResponsiveContainer,
   AreaChart,
   Area
@@ -40,13 +41,14 @@ export default function Dashboard() {
   const [numFiles, setNumFiles] = useState(5);
   const [metricsHistory, setMetricsHistory] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [benchmarkBatchSize, setBenchmarkBatchSize] = useState(20);
 
   // Chat State
   const [messages, setMessages] = useState<any[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [chatConfig, setChatConfig] = useState({
-    model: "gemini",
+    model: "groq",
     collection: "vector_arq"
   });
 
@@ -81,7 +83,7 @@ export default function Dashboard() {
       });
 
       if (!response.body) throw new Error("Không có phản hồi từ server");
-      
+
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
@@ -99,20 +101,32 @@ export default function Dashboard() {
           try {
             const data = JSON.parse(line);
             if (data.type === "status") {
-              setMessages(prev => prev.map(m => 
+              setMessages(prev => prev.map(m =>
                 m.id === assistantMsgId ? { ...m, status: data.message } : m
               ));
             } else if (data.type === "final") {
-              setMessages(prev => prev.map(m => 
-                m.id === assistantMsgId ? {
-                  ...m,
-                  content: data.answer,
-                  status: null,
-                  scores: data.scores,
-                  latency: data.latency,
-                  sources: data.sources
-                } : m
-              ));
+              if (data.update_only) {
+                // Chỉ cập nhật điểm số cho tin nhắn hiện tại
+                setMessages(prev => prev.map(m =>
+                  m.id === assistantMsgId ? {
+                    ...m,
+                    scores: data.scores,
+                    status: null // Tắt trạng thái đang chấm điểm
+                  } : m
+                ));
+              } else {
+                // Hiển thị câu trả lời chính ngay lập tức
+                setMessages(prev => prev.map(m =>
+                  m.id === assistantMsgId ? {
+                    ...m,
+                    content: data.answer,
+                    status: null,
+                    scores: data.scores,
+                    latency: data.latency,
+                    sources: data.sources
+                  } : m
+                ));
+              }
             }
           } catch (e) {
             console.error("Lỗi parse stream line:", line);
@@ -133,14 +147,15 @@ export default function Dashboard() {
       try {
         const res = await axios.get(`${API_BASE}/status`);
         setStatus(res.data);
-        
-        if (res.data.status === "BENCHMARKING") {
+
+        // Luôn cập nhật lịch sử tài nguyên nếu có dữ liệu RAM từ backend
+        if (res.data.ram_usage) {
           setMetricsHistory(prev => [
             ...prev.slice(-19),
-            { 
-              time: new Date().toLocaleTimeString(), 
-              ram: 500 + Math.random() * 200, 
-              latency: 20 + Math.random() * 50 
+            {
+              time: new Date().toLocaleTimeString(),
+              ram: res.data.sys_ram_usage || res.data.ram_usage, // Dùng RAM hệ thống nếu có
+              latency: res.data.last_latency || 0
             }
           ]);
         }
@@ -152,7 +167,7 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    axios.get(`${API_BASE}/pdfs`).then(res => setPdfs(res.data.files)).catch(() => {});
+    axios.get(`${API_BASE}/pdfs`).then(res => setPdfs(res.data.files)).catch(() => { });
   }, []);
 
   const handlePurge = async () => {
@@ -207,7 +222,7 @@ export default function Dashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto grid grid-cols-12 gap-6">
-        
+
         {/* Control Panel */}
         <section className="col-span-12 lg:col-span-4 space-y-6">
           <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl">
@@ -215,50 +230,62 @@ export default function Dashboard() {
               <Activity size={20} className="text-indigo-400" />
               Pipeline Control
             </h3>
-            
+
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/50">
-                <label className="text-xs uppercase tracking-wider text-slate-500 block mb-3">Ingestion Config</label>
+                <label className="text-xs uppercase tracking-wider text-slate-500 block mb-3">Auto Embedding Config</label>
                 <div className="flex gap-3 items-center">
-                  <input 
-                    type="number" 
+                  <input
+                    type="number"
                     value={numFiles}
                     onChange={(e) => setNumFiles(parseInt(e.target.value))}
                     className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 w-20 text-center focus:ring-1 ring-indigo-500 outline-none"
                   />
                   <span className="text-slate-400 text-sm">PDF Files</span>
-                  <button 
-                    onClick={() => runAction("run-ingest", { num_files: numFiles })}
-                    disabled={!["IDLE", "COMPLETED"].includes(status.status)}
-                    className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors rounded-lg py-2 flex items-center justify-center gap-2 text-sm font-medium"
-                  >
-                    <Download size={16} /> Ingest
-                  </button>
                 </div>
               </div>
 
-              <button 
-                onClick={() => runAction("run-embed")}
+              <button
+                onClick={() => runAction("run-crawl")}
                 disabled={!["IDLE", "COMPLETED"].includes(status.status)}
                 className="w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-50 transition-colors rounded-lg py-3 flex items-center justify-center gap-2 font-medium border border-slate-700"
               >
-                <Database size={18} /> Run Embedding
+                <Database size={18} /> Run Crawl data
               </button>
 
-              <button 
+              <button
                 onClick={() => runAction("run-auto-pipeline", { num_files: numFiles })}
                 disabled={!["IDLE", "COMPLETED"].includes(status.status)}
                 className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 transition-all rounded-lg py-3 flex items-center justify-center gap-2 font-semibold border border-indigo-500/30 shadow-lg shadow-indigo-500/10"
               >
-                <Activity size={18} /> AUTO-PIPELINE (Full)
+                <Activity size={18} /> Auto Embedding
               </button>
 
-              <button 
-                onClick={() => runAction("run-benchmark")}
+              <div className="flex gap-2">
+                <select
+                  value={benchmarkBatchSize}
+                  onChange={(e) => setBenchmarkBatchSize(parseInt(e.target.value))}
+                  className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-4 text-sm font-medium focus:ring-1 ring-indigo-500 outline-none w-24"
+                >
+                  <option value={20}>20 Q</option>
+                  <option value={30}>30 Q</option>
+                  <option value={40}>40 Q</option>
+                </select>
+                <button
+                  onClick={() => runAction("run-benchmark", { batch_size: benchmarkBatchSize })}
+                  disabled={!["IDLE", "COMPLETED"].includes(status.status)}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 transition-colors rounded-lg py-4 flex items-center justify-center gap-2 font-bold text-lg border border-slate-700 shadow-xl"
+                >
+                  <Play size={20} fill="currentColor" /> Research
+                </button>
+              </div>
+
+              <button
+                onClick={() => runAction("run-generate-testset")}
                 disabled={!["IDLE", "COMPLETED"].includes(status.status)}
-                className="w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-50 transition-colors rounded-lg py-4 flex items-center justify-center gap-2 font-bold text-lg border border-slate-700 shadow-xl"
+                className="w-full bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-500 transition-all rounded-lg py-3 flex items-center justify-center gap-2 font-semibold border border-emerald-500/30"
               >
-                <Play size={20} fill="currentColor" /> Start Benchmark
+                <CheckCircle2 size={18} /> Generate Ground Truth
               </button>
             </div>
 
@@ -285,7 +312,7 @@ export default function Dashboard() {
 
             <div className="mt-6 pt-4 border-t border-slate-800/60">
               <label className="text-[10px] uppercase tracking-[0.2em] text-red-500/60 block mb-3 font-bold">Danger Zone</label>
-              <button 
+              <button
                 onClick={handlePurge}
                 className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-colors rounded-lg py-3 flex items-center justify-center gap-2 text-sm font-medium border border-red-500/20"
               >
@@ -305,7 +332,7 @@ export default function Dashboard() {
               </div>
               <div className="text-3xl font-bold text-white mb-4">{status.progress}%</div>
               <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-                <motion.div 
+                <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${status.progress}%` }}
                   className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full"
@@ -319,8 +346,8 @@ export default function Dashboard() {
                 {status.excel_url && <CheckCircle2 size={18} className="text-green-400" />}
               </div>
               {status.excel_url ? (
-                <a 
-                  href={status.excel_url} 
+                <a
+                  href={status.excel_url}
                   target="_blank"
                   className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg transition-colors font-medium mt-1"
                 >
@@ -337,22 +364,22 @@ export default function Dashboard() {
               <Activity size={20} className="text-indigo-400" />
               Real-time Chat Demonstration
             </h3>
-            
+
             <div className="flex gap-2 mb-4">
-              <select 
+              <select
                 className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs outline-none"
                 value={chatConfig.model}
-                onChange={(e) => setChatConfig({...chatConfig, model: e.target.value})}
+                onChange={(e) => setChatConfig({ ...chatConfig, model: e.target.value })}
               >
-                <option value="gemini">Gemini 3.1 Flash</option>
-                <option value="qwen">Qwen 2.5 (Ollama)</option>
+                <option value="groq">Groq Cloud (GPT-OSS 20B)</option>
               </select>
-              <select 
+              <select
                 className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs outline-none"
                 value={chatConfig.collection}
-                onChange={(e) => setChatConfig({...chatConfig, collection: e.target.value})}
+                onChange={(e) => setChatConfig({ ...chatConfig, collection: e.target.value })}
               >
                 <option value="vector_raw">Standard RAG</option>
+                <option value="vector_adaptive">Adaptive RAG</option>
                 <option value="vector_pq">PQ RAG</option>
                 <option value="vector_sq8">Scalar RAG</option>
                 <option value="vector_arq">ARQ-RAG (TurboQuant)</option>
@@ -370,39 +397,41 @@ export default function Dashboard() {
                       </div>
                     )}
                     <div className="text-sm markdown-container leading-relaxed">
-                      <ReactMarkdown 
+                      <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkMath]}
                         rehypePlugins={[rehypeKatex]}
                         components={{
-                          table: ({node, ...props}) => <div className="overflow-x-auto my-4 border border-slate-700/50 rounded-xl"><table className="min-w-full divide-y divide-slate-700/50" {...props} /></div>,
-                          th: ({node, ...props}) => <th className="px-4 py-3 bg-slate-800/50 text-left text-xs font-bold text-slate-300 uppercase tracking-wider" {...props} />,
-                          td: ({node, ...props}) => <td className="px-4 py-3 text-xs border-t border-slate-700/50 text-slate-400" {...props} />,
-                          ul: ({node, ...props}) => <ul className="list-disc ml-6 space-y-2 my-3" {...props} />,
-                          ol: ({node, ...props}) => <ol className="list-decimal ml-6 space-y-2 my-3" {...props} />,
-                          li: ({node, ...props}) => <li className="text-sm" {...props} />,
-                          h1: ({node, ...props}) => <h1 className="text-xl font-bold mt-6 mb-3 text-white border-b border-slate-700/50 pb-2" {...props} />,
-                          h2: ({node, ...props}) => <h2 className="text-lg font-bold mt-5 mb-2 text-white" {...props} />,
-                          h3: ({node, ...props}) => <h3 className="text-base font-bold mt-4 mb-2 text-indigo-400" {...props} />,
-                          p: ({node, ...props}) => <p className="mb-4 last:mb-0" {...props} />,
-                          code: ({node, ...props}) => <code className="bg-slate-900/80 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-[13px] border border-slate-700/50" {...props} />,
-                          a: ({node, ...props}) => <a className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4" {...props} />
+                          table: ({ node, ...props }) => <div className="overflow-x-auto my-4 border border-slate-700/50 rounded-xl"><table className="min-w-full divide-y divide-slate-700/50" {...props} /></div>,
+                          th: ({ node, ...props }) => <th className="px-4 py-3 bg-slate-800/50 text-left text-xs font-bold text-slate-300 uppercase tracking-wider" {...props} />,
+                          td: ({ node, ...props }) => <td className="px-4 py-3 text-xs border-t border-slate-700/50 text-slate-400" {...props} />,
+                          ul: ({ node, ...props }) => <ul className="list-disc ml-6 space-y-2 my-3" {...props} />,
+                          ol: ({ node, ...props }) => <ol className="list-decimal ml-6 space-y-2 my-3" {...props} />,
+                          li: ({ node, ...props }) => <li className="text-sm" {...props} />,
+                          h1: ({ node, ...props }) => <h1 className="text-xl font-bold mt-6 mb-3 text-white border-b border-slate-700/50 pb-2" {...props} />,
+                          h2: ({ node, ...props }) => <h2 className="text-lg font-bold mt-5 mb-2 text-white" {...props} />,
+                          h3: ({ node, ...props }) => <h3 className="text-base font-bold mt-4 mb-2 text-indigo-400" {...props} />,
+                          p: ({ node, ...props }) => <p className="mb-4 last:mb-0" {...props} />,
+                          code: ({ node, ...props }) => <code className="bg-slate-900/80 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-[13px] border border-slate-700/50" {...props} />,
+                          a: ({ node, ...props }) => <a className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4" {...props} />
                         }}
                       >
                         {m.content}
                       </ReactMarkdown>
                     </div>
-                    {m.scores && (
+                    {m.latency ? (
                       <div className="mt-3 pt-3 border-t border-slate-700/50 space-y-2">
-                        <div className="flex justify-between text-[10px] uppercase tracking-tighter text-slate-400">
-                          <span>Quality Metrics (RAGAS)</span>
-                          <span>{m.latency}s</span>
+                        <div className="flex justify-between text-[10px] uppercase tracking-tighter text-slate-400 font-semibold items-center">
+                          <span>{m.scores ? "Quality Metrics (RAGAS)" : "System Metrics"}</span>
+                          <span className="bg-slate-900/80 px-2 py-1 rounded text-indigo-300">⏳ {Math.round(m.latency * 1000)} ms</span>
                         </div>
-                        <div className="space-y-1">
-                          <MetricBar label="Faithfulness" value={m.scores.faithfulness} color="bg-emerald-500" />
-                          <MetricBar label="Relevance" value={m.scores.answer_relevancy} color="bg-blue-500" />
-                        </div>
+                        {m.scores && (
+                          <div className="space-y-1 mt-2">
+                            <MetricBar label="Faithfulness" value={m.scores.faithfulness} color="bg-emerald-500" />
+                            <MetricBar label="Relevance" value={m.scores.answer_relevancy} color="bg-blue-500" />
+                          </div>
+                        )}
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -416,14 +445,14 @@ export default function Dashboard() {
             </div>
 
             <form onSubmit={handleChatSubmit} className="relative">
-              <input 
-                type="text" 
+              <input
+                type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 placeholder="Hỏi bất cứ điều gì về tài liệu..."
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 pr-12 text-sm focus:ring-1 ring-indigo-500 outline-none"
               />
-              <button 
+              <button
                 type="submit"
                 className="absolute right-2 top-2 p-2 bg-indigo-600 rounded-lg hover:bg-indigo-500 transition-colors"
                 disabled={isTyping}
@@ -433,43 +462,60 @@ export default function Dashboard() {
             </form>
           </div>
 
-          <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl h-[400px]">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Cpu size={20} className="text-indigo-400" />
-              Real-time Resource Monitor
-            </h3>
-            <div className="w-full h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={metricsHistory}>
-                  <defs>
-                    <linearGradient id="colorRam" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor="#818cf8" stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                  <XAxis dataKey="time" hide />
-                  <YAxis stroke="#475569" fontSize={12} />
-                  <Tooltip 
-                    contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }}
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="ram" 
-                    stroke="#818cf8" 
-                    fillOpacity={1} 
-                    fill="url(#colorRam)" 
-                    name="RAM (MB)" 
-                  />
-                  <Line 
-                    type="monotone" 
-                    dataKey="latency" 
-                    stroke="#f472b6" 
-                    dot={false}
-                    name="Latency (ms)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl h-[400px]">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Cpu size={20} className="text-indigo-400" />
+                Real-time Resource Monitor
+              </h3>
+              <div className="w-full h-[300px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={metricsHistory}>
+                    <defs>
+                      <linearGradient id="colorRam" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#818cf8" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis dataKey="time" hide />
+                    <YAxis stroke="#475569" fontSize={12} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="ram"
+                      stroke="#818cf8"
+                      fillOpacity={1}
+                      fill="url(#colorRam)"
+                      name="RAM (MB)"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="latency"
+                      stroke="#f472b6"
+                      dot={false}
+                      name="Latency (ms)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="bg-[#0b0c10] border border-slate-800 p-6 rounded-2xl backdrop-blur-xl h-[400px] flex flex-col font-mono text-[10px] md:text-xs shadow-inner">
+              <h3 className="text-sm font-semibold mb-4 flex items-center gap-2 text-slate-400 font-sans tracking-wide">
+                <Terminal size={16} className="text-emerald-500" />
+                Backend Live Logs
+              </h3>
+              <div className="flex-1 overflow-y-auto space-y-1.5 custom-scrollbar pr-2 flex flex-col-reverse">
+                {[...(status?.logs || [])].reverse().map((log: string, i: number) => (
+                  <div key={i} className="text-slate-500 break-words leading-relaxed border-b border-slate-800/50 pb-1">
+                    <span className="text-emerald-500/50 mr-2 font-bold">❯</span>
+                    {log}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -504,8 +550,8 @@ function MetricBar({ label, value, color }: { label: string, value: number, colo
         <span>{percentage}%</span>
       </div>
       <div className="w-full bg-slate-900 h-1 rounded-full overflow-hidden">
-        <div 
-          className={`${color} h-full transition-all duration-1000`} 
+        <div
+          className={`${color} h-full transition-all duration-1000`}
           style={{ width: `${percentage}%` }}
         />
       </div>

@@ -44,3 +44,27 @@ class SupabaseManager:
         if not self.supabase:
             return "https://example.com/mock-url.xlsx"
         return self.supabase.storage.from_(bucket).get_public_url(filename)
+
+    # --- Query Classification Cache ---
+
+    def get_query_cache(self, query_text: str):
+        """Tra cứu kết quả phân loại từ Supabase."""
+        if not self.supabase: return None
+        try:
+            res = self.supabase.table("query_cache").select("complexity").eq("query_text", query_text).execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]["complexity"]
+        except Exception as e:
+            print(f"Lỗi khi đọc query_cache: {e}")
+        return None
+
+    def set_query_cache(self, query_text: str, complexity: str):
+        """Lưu kết quả phân loại vào Supabase."""
+        if not self.supabase: return
+        try:
+            self.supabase.table("query_cache").upsert({
+                "query_text": query_text,
+                "complexity": complexity
+            }).execute()
+        except Exception as e:
+            print(f"Lỗi khi ghi query_cache: {e}")

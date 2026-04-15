@@ -1,49 +1,57 @@
 import os
 import json
 import time
+import logging
 import numpy as np
 from typing import List, Dict
-from embed import EmbeddingManager
-from vector_store import VectorStoreManager
-from ragas_eval import RagasEvaluator
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_ollama import ChatOllama
+
+logger = logging.getLogger("ChatService")
+
+# Shared Imports
+from shared.embed import EmbeddingManager
+from shared.vector_store import VectorStoreManager
+from shared.ragas_eval import RagasEvaluator
+from shared.query_analyzer import QueryAnalyzer
+
+# LangChain Imports
+from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage
+
+# Import Model Handlers
+from models.arq_rag.handler import ModelHandler as ARQRAGHandler
+from models.rag_raw.handler import ModelHandler as RawHandler
+from models.rag_pq.handler import ModelHandler as PQHandler
+from models.rag_sq8.handler import ModelHandler as SQ8Handler
+from models.rag_adaptive.handler import ModelHandler as AdaptiveHandler
 
 class ChatService:
     def __init__(self):
         self.embed_manager = EmbeddingManager()
         self.vector_manager = VectorStoreManager()
         self.ragas_evaluator = RagasEvaluator()
-        self.method_labels = {
-            "vector_raw": "[RAG-RAW]",
-            "vector_adaptive": "[RAG-Adaptive]",
-            "vector_pq": "[RAG-PQ]",
-            "vector_sq8": "[RAG-SQ8]",
-            "vector_arq": "[ARQ-RAG]"
+        self.query_analyzer = QueryAnalyzer()
+        
+        # Initialize specialized Model Handlers (one per researcher/model)
+        self.handlers = {
+            "vector_raw": RawHandler(self),
+            "vector_pq": PQHandler(self),
+            "vector_sq8": SQ8Handler(self),
+            "vector_adaptive": AdaptiveHandler(self),
+            "vector_arq": ARQRAGHandler(self)
         }
         
     def get_llm(self, model_type: str):
-        if model_type == "gemini":
-            return ChatGoogleGenerativeAI(
-                model="gemini-3.1-flash-lite-preview",
-                google_api_key=os.getenv("GOOGLE_API_KEY"),
-                temperature=0
-            )
-        else:
-            # Dùng Qwen 2.5 3B qua Ollama container
-            return ChatOllama(
-                model="qwen2.5:3b",
-                base_url=os.getenv("OLLAMA_BASE_URL", "http://ollama:11434"),
-                temperature=0
-            )
+        # Mọi model_type giờ đều trỏ về Groq Cloud (Loại bỏ Local LLM)
+        return ChatGroq(
+            model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            api_key=os.getenv("GROQ_API_KEY"),
+            temperature=0
+        )
 
     def _extract_text(self, content):
-        """Chuyển đổi nội dung phản hồi từ LLM (có thể là list/dict) thành chuỗi văn bản thuần."""
         if isinstance(content, str):
             return content
         if isinstance(content, list):
-            # Gemini qua LangChain có thể trả về list các dictionary (parts)
             text_parts = []
             for part in content:
                 if isinstance(part, dict) and "text" in part:
@@ -55,204 +63,67 @@ class ChatService:
             return "".join(text_parts)
         return str(content)
 
-    def _rewrite_query(self, query: str) -> str:
-        """Sử dụng Gemini để chuyển đổi câu hỏi Tiếng Việt sang Tiếng Anh chuyên ngành phục vụ retrieval."""
-        try:
-            llm = self.get_llm("gemini")
-            prompt = f"""You are a specialized RAG Query Rewriter. 
-Translate the following Vietnamese research question into a precise English search query.
-Focus on maintaining all technical terms (like VBL, FBL, DMDT, ARQ, MIMO, etc.) exactly as they are.
-The goal is to provide a query that will match well with English scientific papers.
-
-Vietnamese Question: {query}
-English Search Query:"""
-            
-            messages = [HumanMessage(content=prompt)]
-            response = llm.invoke(messages)
-            rewritten = self._extract_text(response.content).strip()
-            print(f"Rewritten Query: {rewritten}")
-            return rewritten
-        except Exception as e:
-            print(f"Lỗi rewrite query: {e}")
-            return query
-
-    async def chat(self, query: str, model_name: str, collection_name: str):
-        # 1. Sử dụng Query gốc (Tránh Translation Noise)
-        search_query = query
-        # Tự động bỏ qua rewrite query để giữ đúng ngữ nghĩa chuyên môn Tiếng Việt
-        # if any(ord(c) > 127 for c in query): 
-        #    search_query = self._rewrite_query(query)
-
-        # 2. Embed search query
-        query_vector = np.array(self.embed_manager.get_embedding(search_query))
-        
-        # 3. Retrieval (Adaptive Limit)
-        limit = 15
-        if collection_name == "vector_arq":
-            limit = 80 # Tăng Recall để TurboQuant xử lý được các rank thấp
-        
-        search_results = self.vector_manager.search(collection_name, query_vector, limit=limit)
-        
-        # 3. Reranking (Adaptive logic cho ARQ using ADC Direct Scoring)
-        final_contexts = []
-        source_hits = []
-        
-        if collection_name == "vector_arq":
-            from quantization import QuantizationManager
-            qm = QuantizationManager()
-            
-            # Trích xuất dữ liệu hàng loạt để tính điểm Batch
-            idx_batch = np.array([hit.payload["idx"] for hit in search_results])
-            qjl_batch = np.array([hit.payload["qjl"] for hit in search_results])
-            gamma_batch = np.array([hit.payload["gamma"] for hit in search_results])
-            orig_norms = np.array([hit.payload.get("orig_norm", 1.0) for hit in search_results])
-            
-            # Batch Reranking (ADC Direct Scoring với chuẩn hóa ngược)
-            scores = qm.tq_prod.compute_score_batch(query_vector, idx_batch, qjl_batch, gamma_batch, orig_norms=orig_norms)
-            
-            # Sắp xếp và lấy Top 5
-            refined_results = []
-            for i, score in enumerate(scores):
-                refined_results.append((score, search_results[i]))
-                
-            refined_results.sort(key=lambda x: x[0], reverse=True)
-            top_hits = [x[1] for x in refined_results[:5]]
-            
-            final_contexts = [hit.payload["content"] for hit in top_hits]
-            source_hits = top_hits
-        else:
-            final_contexts = [hit.payload["content"] for hit in search_results]
-            source_hits = search_results
-
-        # 4. Generate Answer
-        context_text = "\n\n".join(final_contexts)
-        system_prompt = f"""Bạn là một trợ lý nghiên cứu AI chuyên nghiệp. 
-Hãy trả lời câu hỏi dựa trên ngữ cảnh được cung cấp sau đây. 
-Nếu thông tin không có trong ngữ cảnh, hãy nói là bạn không biết, đừng tự bịa câu trả lời.
-
-NGỮ CẢNH:
-{context_text}"""
-
-        llm = self.get_llm(model_name)
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=query)
-        ]
-        
-        start_time = time.time()
-        response = llm.invoke(messages)
-        answer = self._extract_text(response.content)
-        # Tự động gắn nhãn theo mô hình đã chọn
-        label = self.method_labels.get(collection_name, "[RAG]")
-        if not answer.startswith(label):
-            answer = f"{label} {answer}"
-            
-        latency = time.time() - start_time
-        
-        # 5. Ragas Evaluation
-        scores = self.ragas_evaluator.evaluate(query, final_contexts, answer)
-        
-        return {
-            "answer": answer,
-            "sources": [
-                {"file": hit.payload["file"], "content": hit.payload["content"]} 
-                for hit in source_hits[:5]
-            ],
-            "scores": scores,
-            "latency": round(latency, 2),
-            "method": collection_name
-        }
-
     async def chat_stream(self, query: str, model_name: str, collection_name: str):
-        """Hàm stream tiến trình xử lý từng bước cho Frontend."""
-        # 1. Sử dụng Query gốc (Tránh Translation Noise)
-        search_query = query
-        # Vô hiệu hóa bước dịch sang Tiếng Anh
-        # yield json.dumps({"type": "status", "message": "🌐 Đang chuyển đổi truy vấn sang Tiếng Anh chuyên ngành..."}) + "\n"
-        # search_query = self._rewrite_query(query)
-
-        # 2. Embed query
-        yield json.dumps({"type": "status", "message": "🔍 Đang nhúng câu hỏi bằng nomic-embed-text..."}) + "\n"
-        query_vector = np.array(self.embed_manager.get_embedding(search_query))
+        """Hàm điều phối Luồng Chat Modular."""
+        logger.info("=" * 70)
+        logger.info(f"[ChatService] NHẬN YÊU CẦU CHAT MỚI")
+        logger.info(f"  Query: {query[:120]}{'...' if len(query) > 120 else ''}")
+        logger.info(f"  Model: {model_name} | Collection: {collection_name}")
         
-        # 3. Retrieval (Adaptive Limit)
-        limit = 15
-        if collection_name == "vector_arq":
-            limit = 80
+        yield json.dumps({"type": "status", "message": "🔍 Đang trích xuất đặc trưng câu hỏi..."}) + "\n"
         
-        search_results = self.vector_manager.search(collection_name, query_vector, limit=limit)
-        
-        # 3. Reranking
-        final_contexts = []
-        source_hits = []
-        
-        if collection_name == "vector_arq":
-            yield json.dumps({"type": "status", "message": "⚡ Đang xử lý ARQ Adaptive Reranking (Batch ADC Score)..."}) + "\n"
-            from quantization import QuantizationManager
-            qm = QuantizationManager()
-            
-            # Batch data extraction
-            idx_batch = np.array([hit.payload["idx"] for hit in search_results])
-            qjl_batch = np.array([hit.payload["qjl"] for hit in search_results])
-            gamma_batch = np.array([hit.payload["gamma"] for hit in search_results])
-            orig_norms = np.array([hit.payload.get("orig_norm", 1.0) for hit in search_results])
-            
-            # Batch Reranking
-            scores = qm.tq_prod.compute_score_batch(query_vector, idx_batch, qjl_batch, gamma_batch, orig_norms=orig_norms)
-            
-            refined_results = []
-            for i, score in enumerate(scores):
-                refined_results.append((score, search_results[i]))
-            
-            refined_results.sort(key=lambda x: x[0], reverse=True)
-            top_hits = [x[1] for x in refined_results[:5]]
-            # Debug log rank 1
-            print(f"Top 1 Score: {refined_results[0][0]} | File: {top_hits[0].payload['file']}")
-            final_contexts = [hit.payload["content"] for hit in top_hits]
-            source_hits = top_hits
+        # Adaptive logic (shared across relevant models)
+        limit = 40
+        top_k = 15
+        if collection_name in ["vector_adaptive", "vector_arq"]:
+            yield json.dumps({"type": "status", "message": "🧠 Phân tích độ phức tạp (Adaptive Mode)..."}) + "\n"
+            analysis = self.query_analyzer.analyze(query)
+            logger.info(f"  [Adaptive] Kết quả phân tích: complexity={analysis['complexity']}, "
+                         f"limit={analysis['limit']}, top_k={analysis['top_k']}")
+            yield json.dumps({"type": "status", "message": f"📌 {analysis['label']}"}) + "\n"
+            limit = analysis["limit"]
+            top_k = analysis["top_k"]
         else:
-            final_contexts = [hit.payload["content"] for hit in search_results]
-            source_hits = search_results
+            logger.info(f"  [Standard] Sử dụng tham số cố định: limit={limit}, top_k={top_k}")
+            yield json.dumps({"type": "status", "message": "🛡️ Chế độ xử lý: STANDARD (Cố định)"}) + "\n"
 
-        # 4. Generate Answer
-        yield json.dumps({"type": "status", "message": "💎 Đang tổng hợp câu trả lời từ ngữ cảnh..."}) + "\n"
-        context_text = "\n\n".join(final_contexts)
-        system_prompt = f"""Bạn là một trợ lý nghiên cứu AI chuyên nghiệp. 
-Hãy trả lời câu hỏi dựa trên ngữ cảnh được cung cấp sau đây. 
-Nếu thông tin không có trong ngữ cảnh, hãy nói là bạn không biết, đừng tự bịa câu trả lời.
+        # Delegate to the specific Model Handler
+        handler = self.handlers.get(collection_name)
+        if not handler:
+            logger.error(f"  Không tìm thấy handler cho collection: {collection_name}")
+            yield json.dumps({"type": "error", "message": "Không tìm thấy mô hình tương ứng."}) + "\n"
+            return
 
-NGỮ CẢNH:
-{context_text}"""
+        logger.info(f"  Dispatch -> {handler.__class__.__name__} (collection={collection_name})")
+        yield json.dumps({"type": "status", "message": f"⚡ Đang chạy quy trình RAG của mô hình {collection_name}..."}) + "\n"
         
-        llm = self.get_llm(model_name)
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=query)
-        ]
-        
-        start_time = time.time()
-        response = llm.invoke(messages)
-        answer = self._extract_text(response.content)
-        # Tự động gắn nhãn theo mô hình đã chọn
-        label = self.method_labels.get(collection_name, "[RAG]")
-        if not answer.startswith(label):
-            answer = f"{label} {answer}"
+        try:
+            # 1. Process request via specific handler (Generation Phase) - with timeout
+            import asyncio
+            try:
+                result = await asyncio.wait_for(handler.handle(query, model_name, limit, top_k), timeout=90)
+            except asyncio.TimeoutError:
+                yield json.dumps({"type": "error", "message": "⏳ Timeout: LLM không phản hồi trong 90 giây. Hãy thử lại hoặc chọn mô hình Ollama Local."}) + "\n"
+                return
             
-        latency = time.time() - start_time
-        
-        # 5. Ragas Evaluation
-        yield json.dumps({"type": "status", "message": "📊 Đang đánh giá chất lượng phản hồi (RAGAS)..."}) + "\n"
-        scores = self.ragas_evaluator.evaluate(query, final_contexts, answer)
-        
-        final_result = {
-            "type": "final",
-            "answer": answer,
-            "sources": [
-                {"file": hit.payload["file"], "content": hit.payload["content"]} 
-                for hit in source_hits[:5]
-            ],
-            "scores": scores,
-            "latency": round(latency, 2),
-            "method": collection_name
-        }
-        yield json.dumps(final_result) + "\n"
+            # 2. Yield final text response immediately to the UI
+            # Tích hợp đánh giá RAGAS cho Chat mode (Cần thiết cho Nghiên cứu/Luận văn)
+            yield json.dumps({"type": "status", "message": f"📊 Đang chấm điểm chất lượng (RAGAS + {self.ragas_evaluator.model_name})..."}) + "\n"
+            
+            scores = {"faithfulness": 0.0, "answer_relevancy": 0.0, "answer_relevance": 0.0}
+            if "contexts" in result and result["answer"]:
+                try:
+                    scores = self.ragas_evaluator.evaluate(query, result["contexts"], result["answer"])
+                except Exception as eval_err:
+                    logger.error(f"  [RAGAS] Lỗi chấm điểm: {eval_err}")
+
+            final_result = {
+                "type": "final",
+                **result,
+                "method": collection_name,
+                "scores": scores
+            }
+            yield json.dumps(final_result) + "\n"
+
+        except Exception as e:
+            yield json.dumps({"type": "error", "message": f"Lỗi Handler: {str(e)}"}) + "\n"

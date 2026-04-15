@@ -9,6 +9,9 @@ services:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
       - SECRET_KEY=${SECRET_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_MODEL=${GROQ_MODEL}
       - OLLAMA_BASE_URL=http://ollama:11434
     depends_on:
       - ollama
@@ -49,7 +52,7 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      - ./ollama_storage:/root/.ollama
+      - ollama_data:/root/.ollama
     deploy:
       resources:
         reservations:
@@ -59,4 +62,7 @@ services:
               capabilities: [gpu]
     entrypoint: [ "/bin/sh", "-c" ]
     command: >
-      "ollama serve & sleep 5 && ollama pull nomic-embed-text && ollama pull qwen2.5:3b && wait"
+      "ollama serve & sleep 10; ollama pull nomic-embed-text || true; wait"
+
+volumes:
+  ollama_data:
