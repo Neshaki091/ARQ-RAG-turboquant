@@ -78,7 +78,7 @@ class PurgeRequest(BaseModel):
     secret_key: str
 
 class BenchmarkRequest(BaseModel):
-    batch_size: int = 20
+    batch_size: int = 10
 
 import psutil
 
@@ -163,9 +163,10 @@ async def purge_data(req: PurgeRequest):
     try:
         # 1. Xóa Qdrant collections
         vm = VectorStoreManager()
+        # Đã cập nhật: delete_all_collections giờ tự động dùng list mặt định nếu không truyền
         vm.delete_all_collections()
         
-        # 2. Xóa các tệp data phục vụ tính toán (giữ lại chunks và metadata)
+        # 2. Xóa các tệp data phục vụ tính toán
         files_to_delete = [
             "data/embeddings.npy",
             "data/centroids.npy",
@@ -178,7 +179,12 @@ async def purge_data(req: PurgeRequest):
                 os.remove(f)
                 print(f"Đã xóa tệp: {f}")
         
-        # 3. Reset state
+        # 3. Xóa Supabase Storage (MỚI)
+        sm = SupabaseManager()
+        sm.clear_bucket("papers")
+        sm.clear_bucket("benchmark-excel")
+        
+        # 4. Reset state
         global state
         state = {
             "status": "IDLE",
@@ -192,7 +198,7 @@ async def purge_data(req: PurgeRequest):
             "excel_url": None
         }
         
-        return {"message": "Hệ thống đã được làm sạch hoàn toàn!"}
+        return {"message": "Hệ thống đã được làm sạch hoàn toàn (Qdrant, Local Files, và Supabase Storage)!"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi khi xóa dữ liệu: {str(e)}")
 

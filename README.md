@@ -54,10 +54,20 @@ Hệ thống sẽ chạy tại:
 1. **Cào dữ liệu (Crawl)**: Sử dụng nút "Run Crawl" để lấy dữ liệu từ arXiv vào Database.
 2. **Xử lý dữ liệu (Auto Embedding)**: Hệ thống tự động Chunking, Embedding và đồng bộ hóa 5 loại nén vector vào Qdrant.
 3. **Thử nghiệm (Chat)**: Chat trực tiếp với từng model để cảm nhận độ chính xác và tốc độ.
-4. **Đánh giá (Benchmark)**: Chọn số lượng câu hỏi (20/30/40) và nhấn "Research". Hệ thống sẽ chạy RAGAS và xuất file Excel cumulative kết quả.
+4. **Đánh giá (Benchmark)**: Chọn số lượng câu hỏi (ví dụ: 10 câu/batch) và nhấn "Research". Hệ thống sẽ chạy quy trình đánh giá trên bộ **500 câu hỏi mỗi model** (Tổng 2.500 lượt chạy) và xuất file Excel cumulative kết quả.
+
+## 📏 Quy ước Nghiên cứu (Research Conventions)
+
+Dự án tuân thủ nghiêm ngặt các quy chuẩn để đảm bảo tính khách quan của số liệu:
+- **Kiến trúc ADC (Asymmetric Distance Computation)**: Chỉ nén Vector trong Database, giữ nguyên định dạng Floating Point cho Vector truy vấn (Query) để đảm bảo độ chính xác.
+- **Quy trình Benchmark**: Chạy tuần tự từng model để tránh tranh chấp RAM và đo lường đồng bộ 2 nhóm chỉ số: Hiệu năng (RAM, Latency) và Chất lượng (RAGAS Full Metrics).
+- **Tham số vạch nhịp (Safe Mode)**: Duy trì khoảng nghỉ **75 giây** giữa các yêu cầu API để đảm bảo độ ổn định và tránh Rate Limit.
+- **Tính thống nhất**: 100% các model chạy trên cùng một Dataset (arXiv papers), cùng Embedding Model (`nomic-embed-text`) và sử dụng cùng một bộ Query Set (Ground Truth) gồm **500 câu hỏi** cho mỗi model để so sánh công bằng.
+- **TurboQuant Definition**: Kết hợp nén Scalar Quantization với kỹ thuật bù sai số QJL (Residual-based) để đạt hiệu năng tương đương vector gốc với dung lượng nén giảm hơn 8 lần.
 
 ## 📄 Ghi chú kỹ thuật
-Dự án triển khai các thuật toán nén Vector thủ công (Manual Quantization) bằng **NumPy** thay vì dùng thư viện có sẵn để đảm bảo tính minh bạch cho các báo cáo trong luận văn. Cơ chế **TurboQuant** sử dụng tích vô hướng trực tiếp (ADC) giúp đạt tốc độ vượt trội so với tìm kiếm vector thô.
+Dự án triển khai các thuật toán nén Vector thủ công (Manual Quantization) bằng **NumPy** thay vì dùng thư viện có sẵn để đảm bảo tính minh bạch cho các báo cáo trong luận văn. Cơ chế **TurboQuant** sử dụng tích vô hướng trực tiếp (ADC - Asymmetric Distance Computation) và mô hình **Llama 3.3 70B** làm giám khảo trung tâm giúp đạt độ chính xác học thuật cao nhất.
 
 ---
-*Phát triển bởi: Nhóm nghiên cứu ARQ-RAG*
+*Phát triển bởi: Nhóm nghiên cứu ARQ-RAG* 
+*Đồ án tốt nghiệp - Trường Đại học Giao thông Vận tải TP.HCM*

@@ -38,7 +38,24 @@ class SupabaseManager:
             return
         
         with open(file_path, "rb") as f:
-            self.supabase.storage.from_(bucket).upload(filename, f, {"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"})
+            # Sử dụng upsert: True để ghi đè nếu tồn tại
+            self.supabase.storage.from_(bucket).upload(
+                path=filename, 
+                file=f, 
+                file_options={"content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "upsert": True}
+            )
+
+    def clear_bucket(self, bucket: str):
+        """Xóa toàn bộ file trong bucket."""
+        if not self.supabase: return
+        try:
+            files = self.supabase.storage.from_(bucket).list()
+            file_names = [f['name'] for f in files if f['name'] != '.emptyFolderPlaceholder']
+            if file_names:
+                print(f"Đang xóa {len(file_names)} file trong bucket {bucket}...")
+                self.supabase.storage.from_(bucket).remove(file_names)
+        except Exception as e:
+            print(f"Lỗi khi xóa bucket {bucket}: {e}")
 
     def get_public_url(self, bucket: str, filename: str):
         if not self.supabase:

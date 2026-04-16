@@ -2,22 +2,29 @@
 
 Hệ thống được thiết kế để so sánh hiệu năng giữa các phương pháp RAG truyền thống và phương pháp **ARQ-RAG (Adaptive Reranking Quantization)**.
 
-## 1. Cấu trúc thư mục (Project Structure)
+## 1. Cấu trúc thư mục Modular (Project Structure)
+
+Hệ thống được tổ chức theo kiến trúc **Modular**, tách biệt logic lõi, các mô hình nén và phần dùng chung:
 
 ```text
 DEMO_ARQ_RAG/
-├── backend/                # Backend API (FastAPI)
-│   ├── main.py             # Entry point, quản lý API endpoints
-│   ├── chat_service.py     # Logic chính cho xử lý câu hỏi (Chat Stream)
-│   ├── query_analyzer.py   # Phân loại câu hỏi (SIMPLE/COMPLEX) và quản lý Cache
-│   ├── vector_store.py     # Tương tác với cơ sở dữ liệu vector Qdrant
-│   ├── quantization.py     # Implement thuật toán ARQ, PQ, SQ8
-│   ├── benchmark.py        # Trình chạy đánh giá (RAGAS, Latency, RAM)
-│   ├── ingest.py           # Trích xuất dữ liệu từ PDF và cắt nhỏ (Chunking)
-│   ├── embed.py            # Chuyển đổi văn bản thành Vector (Nomic Embed)
-│   └── supabase_client.py  # Quản lý lưu trữ PDF và kết quả Cache trên Supabase
-├── frontend/               # Giao diện người dùng (Next.js/React)
-└── data/                   # Lưu trữ tạm các tệp local (.json, .npy)
+├── backend/
+│   ├── models/             # Chứa các Handler riêng biệt cho 5 biến thể RAG
+│   │   ├── arq_rag/        # Mô hình ARQ (TurboQuant) + Reranking
+│   │   ├── rag_raw/        # Mô hình Baseline (không nén)
+│   │   ├── rag_adaptive/   # Mô hình Adaptive (chỉnh Limit/Top-K động)
+│   │   └── ...             # PQ, SQ8
+│   ├── shared/             # Các lớp dùng chung cho toàn hệ thống
+│   │   ├── vector_store.py # Quản lý Qdrant (5 collections)
+│   │   ├── supabase_client.py # Quản lý tài liệu và Cache
+│   │   ├── embed.py        # Tương tác với Ollama (Nomic)
+│   │   └── query_analyzer.py # Bộ não phân loại câu hỏi (Elite Keywords)
+│   ├── main.py             # FastAPI entry point & Routing
+│   ├── chat_service.py     # Điều phối Luồng Chat (Modular Dispatcher)
+│   ├── crawler_paper.py    # Tự động thu thập dữ liệu khoa học
+│   └── benchmark.py        # Hệ thống đánh giá hiệu năng (500 queries/model)
+├── frontend/               # Giao diện Next.js Dashboard
+└── docker/                 # Cấu hình triển khai container hóa
 ```
 
 ## 2. Luồng hoạt động (System Workflow)

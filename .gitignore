@@ -4,18 +4,39 @@ node_modules/
 dist/
 .DS_Store
 
-# Storage
+# Storage / Database
 ollama_storage/
 qdrant_storage/
 backend/data/
 backend/__pycache__/
+backend/.pytest_cache/
 
 # Frontend
 frontend/.next/
 frontend/node_modules/
 frontend/out/
 
+# Results & Logs
+results/
+*_results.xlsx
+
+# LaTeX (Báo cáo sinh ra)
+*.aux
+*.fdb_latexmk
+*.fls
+*.out
+*.synctex.gz
+*.pdf
+*/reports
+
 # Others
 */blobs/*
 *.pyc
 .vscode/
+REFACTOR_PROGRESS.md
+RULE_FORAGENT.md
+WORK_ASSIGNMENT_LUYEN.md
+WORK_ASSIGNMENT_MANH.md
+WORK.md
+QAEXAMPLE.md
+RULE_FORAGENT.md

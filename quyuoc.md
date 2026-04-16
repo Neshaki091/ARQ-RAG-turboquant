@@ -167,7 +167,7 @@ memory = psutil.Process().memory_info().rss / 1024\*\*2
 
 ✔ Cùng dataset  
 ✔ Cùng embedding  
-✔ Cùng query set (~100 câu)  
+✔ Cùng query set (~500 câu)  
 ✔ Chạy tuần tự (tránh OOM 16GB)  
 ✔ Reset memory mỗi model  
 ✔ Không thay đổi hyperparameter giữa model
@@ -214,36 +214,33 @@ Theo 2 nhóm:
 
 ## 📦 Cấu trúc test
 
-10 Test Sets  
-mỗi Test Set = 20 queries
+50 Test Sets  
+mỗi Test Set = 50 runs (10 queries x 5 models)
 
 👉 Tổng:
 
-200 queries / model  
-1000 queries toàn hệ thống
+500 queries / model  
+2500 queries toàn hệ thống
 
 ## 🔹 Yêu cầu test
 
 - Câu hỏi đa dạng (dễ / trung bình / khó)
 - Có ground truth (để tính RAGAS)
-- Dùng **cùng bộ câu hỏi cho tất cả model**
+- Dùng **cùng bộ câu hỏi cho tất cả model** (Tổng 500 câu)
 
 # ⚙️ 4. QUY TRÌNH CHẠY THỰC NGHIỆM
 
-FOR mỗi model (5):  
-load model + database  
-<br/>FOR mỗi test set (10):  
-FOR mỗi query (20):  
-run query  
-đo latency  
-đo RAM  
-tính RAGAS (query-level)  
-lưu kết quả  
-<br/>aggregate test set:  
-peak RAM  
-max latency  
-avg RAGAS  
-<br/>unload model (giải phóng RAM)
+FOR mỗi batch (50):  
+    FOR mỗi model (5):  
+        load model + database  
+        FOR mỗi unique query (10):  
+            run query  
+            đo latency  
+            đo RAM  
+            tính RAGAS (query-level)  
+            lưu kết quả  
+            đợi 75s (TPM Safe)
+        unload model (giải phóng RAM)
 
 # 📊 5. QUY ƯỚC ĐO METRICS
 
@@ -269,6 +266,11 @@ Từ 20 queries:
 | Peak RAM    | max(RAM)      |
 | Max Latency | max(latency)  |
 | RAGAS       | trung bình    |
+
+## 🔥 5.3 Batch-level (MỚI)
+- 10 queries x 5 models = 50 runs.
+- Ước tính thời gian: ~85 phút/batch (với delay 75s).
+- Tổng số batch cần chạy: 50 batches.
 
 ## 🔥 5.3 Model-level
 

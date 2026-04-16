@@ -4,8 +4,11 @@ import psutil
 import json
 import numpy as np
 import pandas as pd
+import logging
 from datetime import datetime
 from shared.query_analyzer import QueryAnalyzer
+
+logger = logging.getLogger("Benchmark")
 
 class BenchmarkManager:
     def __init__(self, embeddings, chunks):
@@ -111,9 +114,9 @@ class BenchmarkManager:
                 
                 # [MỚI] Delay 90s giữa các câu hỏi để tránh Rate Limit (8k TPM)
                 if i < len(test_queries) - 1:
-                    print(f"   ⏳ Đang chờ 90 giây trước câu hỏi tiếp theo (TPM Safe Mode)...")
+                    print(f"   ⏳ Đang chờ 75 giây trước câu hỏi tiếp theo (TPM Safe Mode)...")
                     import asyncio
-                    await asyncio.sleep(90)
+                    await asyncio.sleep(75)
 
         # 1. Lưu file Batch riêng
         df_batch = pd.DataFrame(batch_results)

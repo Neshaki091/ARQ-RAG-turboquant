@@ -44,6 +44,15 @@ async def crawl_arxiv():
     
     METADATA_DIR.mkdir(parents=True, exist_ok=True)
     
+    # Đảm bảo bucket 'papers' tồn tại
+    try:
+        buckets = supabase.storage.list_buckets()
+        if not any(b.name == 'papers' for b in buckets):
+            print("⚠️ Bucket 'papers' chưa tồn tại. Đang tạo...")
+            supabase.storage.create_bucket('papers', options={'public': True})
+    except Exception as e:
+        print(f"⚠️ Cảnh báo khi kiểm tra bucket: {e}")
+
     total_saved = 0
     saved_ids = set()
     max_per_query = 300
@@ -107,12 +116,16 @@ async def crawl_arxiv():
                         if pdf_res.status_code == 200:
                             # Upload to Supabase
                             print(f"   ⬆️ Đang Upload PDF lên Supabase Storage...")
-                            supabase.storage.from_("papers").upload(
+                            upload_res = supabase.storage.from_("papers").upload(
                                 path=pdf_filename,
                                 file=pdf_res.content,
-                                file_options={"content-type": "application/pdf", "x-upsert": "true"}
+                                file_options={"content-type": "application/pdf", "upsert": True}
                             )
-                            
+                            # Kiểm tra nếu kết quả trả về có lỗi (tùy phiên bản SDK)
+                            if hasattr(upload_res, 'error') and upload_res.error:
+                                print(f"   ❌ Lỗi Upload: {upload_res.error}")
+                                continue
+
                             # Save Metadata TXT
                             txt_content = f"""Tiêu đề bài báo: {title}
 Tác giả: {', '.join(authors)}

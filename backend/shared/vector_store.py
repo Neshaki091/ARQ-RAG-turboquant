@@ -74,10 +74,17 @@ class VectorStoreManager:
         logger.debug(f"Qdrant response: {len(response.points)} points từ {collection_name}")
         return response.points
 
-    def delete_all_collections(self, collections):
-        """Xóa sạch các collections được chỉ định."""
+    def delete_all_collections(self, collections=None):
+        """Xóa sạch các collections được chỉ định. Nếu không truyền, xóa các collection mặc định."""
+        if collections is None:
+            # Các collection chuẩn của hệ thống
+            collections = ["vector_raw", "vector_pq", "vector_sq8", "vector_adaptive", "vector_arq"]
+        
         for name in collections:
-            if self.client.collection_exists(name):
-                print(f"Đang xóa collection: {name}...")
-                self.client.delete_collection(name)
+            try:
+                if self.client.collection_exists(name):
+                    print(f"Đang xóa collection: {name}...")
+                    self.client.delete_collection(name)
+            except Exception as e:
+                print(f"Lỗi khi xóa collection {name}: {e}")
         return True

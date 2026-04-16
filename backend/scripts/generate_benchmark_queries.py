@@ -30,11 +30,11 @@ async def generate_questions():
             except:
                 existing_queries = []
     
-    if len(existing_queries) >= 1000:
+    if len(existing_queries) >= 500:
         print(f"Benchmark queries already have {len(existing_queries)} questions. Done.")
         return
 
-    print(f"Current questions: {len(existing_queries)}. Generating more to reach 1000...")
+    print(f"Current questions: {len(existing_queries)}. Generating more to reach 500...")
 
     # 3. Setup LLM
     llm = ChatGoogleGenerativeAI(model="models/gemini-3.1-flash-lite-preview", google_api_key=os.getenv("GOOGLE_API_KEY"))
@@ -50,7 +50,7 @@ async def generate_questions():
     chain = prompt | llm
 
     # 4. Generate loop
-    target_count = 1000
+    target_count = 500
     queries = existing_queries
     
     # Calculate how many questions per chunk on average
