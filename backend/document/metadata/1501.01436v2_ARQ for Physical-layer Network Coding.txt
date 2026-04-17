@@ -1,0 +1,11 @@
+Tiêu đề bài báo: ARQ for Physical-layer Network Coding
+Tác giả: Jianghao He, Soung-Chang Liew
+Ngày xuất bản: 2015-01-07
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/1501.01436v2
+Link PDF: https://arxiv.org/pdf/1501.01436v2
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/1501.01436v2_ARQ for Physical-layer Network Coding.pdf
+Chủ đề Crawler: ARQ
+
+--- TÓM TẮT (ABSTRACT) ---
+This paper investigates ARQ (Automatic Repeat request) designs for PNC (Physical-layer Network Coding) systems. We have previously found that, besides TWRC (Two-Way Relay Channel) operated on the principle of PNC, there are many other PNC building blocks--building blocks are simple small network structures that can be used to construct a large network. In some of these PNC building blocks, receivers can obtain side information through overhearing. Although such overheard information is not the target information that the receivers desire, the receivers can exploit the overheard information together with a network-coded packet received to obtain a desired native packet. This leads to throughput gain. Our previous study, however, assumed what is sent always get received. In practice, that is not the case. Error control is needed to ensure reliable communication. This paper focuses on the use of ARQ to ensure reliable PNC communication. The availability of overheard Information and its potential exploitation make the ARQ design of a network-coded system different from that of a non-network-coded system. In this paper, we lay out the fundamental considerations for such ARQ design: 1) We address how to track the stored coded packets and overheard packets to increase the chance of packet extraction, and derive the throughput gain achieved by tracking 2) We investigate two variations of PNC ARQ, coupled and non-coupled ARQs, and prove that non-coupled ARQ is more efficient; 3) We show how to optimize parameters in PNC ARQ--specifically the window size and ACK frequency--to minimize the throughput degradation caused by ACK feedback overhead and wasteful retransmissions due to lost ACK.

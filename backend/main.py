@@ -19,12 +19,18 @@ ui_log_queue = deque(maxlen=100)
 
 class UILogHandler(logging.Handler):
     def emit(self, record):
-        if "uvicorn" in record.name or "/status" in str(record.msg): return
+        # Chỉ lọc duy nhất log /status để tránh tràn giao diện do polling
+        if "/status" in str(record.msg): return
+        
+        # 🟢 YÊU CẦU: Chỉ hiện log stream (ChatService) khi có LỖI (ERROR)
+        if record.name == "ChatService" and record.levelno < logging.ERROR:
+            return
+            
         msg = self.format(record)
         ui_log_queue.append(msg)
 
 ui_handler = UILogHandler()
-ui_handler.setFormatter(logging.Formatter("%(asctime)s | %(name)s | %(message)s", datefmt="%H:%M:%S"))
+ui_handler.setFormatter(logging.Formatter("%(asctime)s | %(name)s | %(levelname)s | %(message)s", datefmt="%H:%M:%S"))
 
 # ── Cấu hình Logging cho tất cả model retrieval ──
 logging.basicConfig(
@@ -32,8 +38,13 @@ logging.basicConfig(
     format="%(asctime)s | %(name)-15s | %(levelname)s | %(message)s",
     datefmt="%H:%M:%S"
 )
-# Đảm bảo tất cả logger của các model handler đều hiển thị
-for _logger_name in ["RAG-RAW", "RAG-PQ", "RAG-SQ8", "RAG-Adaptive", "ARQ-RAG", "SharedRAG", "VectorStore"]:
+# Đảm bảo tất cả các hoạt động chính đều được ghi nhận vào UI
+_TARGET_LOGGERS = [
+    "RAG-RAW", "RAG-PQ", "RAG-SQ8", "RAG-Adaptive", "ARQ-RAG", 
+    "SharedRAG", "VectorStore", "Ingest", "Embedding", "Benchmark", 
+    "ChatService", "Supabase", "uvicorn", "uvicorn.access", "httpx", "Crawler"
+]
+for _logger_name in _TARGET_LOGGERS:
     logger = logging.getLogger(_logger_name)
     logger.setLevel(logging.INFO)
     logger.addHandler(ui_handler)
@@ -56,6 +67,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Trạng thái hệ thống (Cải tiến) ---
+active_processes = {} # Lưu trữ các tiến trình subprocess đang chạy
 
 # Global State
 state = {
@@ -147,7 +161,7 @@ async def run_embed(background_tasks: BackgroundTasks):
         except Exception as e:
             state["status"] = "IDLE"
             state["last_error"] = str(e)
-            print(f"Embed Error: {e}")
+            logger.error(f"Embed Error: {e}")
 
     background_tasks.add_task(process)
     return {"message": "Bắt đầu tạo embeddings và đồng bộ hóa Qdrant..."}
@@ -177,14 +191,24 @@ async def purge_data(req: PurgeRequest):
         for f in files_to_delete:
             if os.path.exists(f):
                 os.remove(f)
-                print(f"Đã xóa tệp: {f}")
+                logger.info(f"Đã xóa tệp: {f}")
         
-        # 3. Xóa Supabase Storage (MỚI)
+        # 3. Xóa Supabase Storage & Database (MỚI)
         sm = SupabaseManager()
         sm.clear_bucket("papers")
         sm.clear_bucket("benchmark-excel")
+        sm.clear_database_table("papers")
+        sm.clear_database_table("benchmark_queries")
         
-        # 4. Reset state
+        # 4. Xóa metadata local
+        metadata_dir = "document/metadata"
+        if os.path.exists(metadata_dir):
+            import shutil
+            shutil.rmtree(metadata_dir)
+            os.makedirs(metadata_dir)
+            logger.info("✅ Đã xóa sạch thư mục metadata địa phương.")
+
+        # 5. Reset state
         global state
         state = {
             "status": "IDLE",
@@ -248,7 +272,7 @@ async def run_benchmark(req: BenchmarkRequest, background_tasks: BackgroundTasks
         except Exception as e:
             state["status"] = "IDLE"
             state["last_error"] = str(e)
-            print(f"Benchmark Error: {e}")
+            logger.error(f"Benchmark Error: {e}")
 
     background_tasks.add_task(process)
     return {"message": "Bắt đầu chạy benchmark..."}
@@ -314,7 +338,7 @@ async def run_auto_pipeline(req: IngestRequest, background_tasks: BackgroundTask
         except Exception as e:
             state["status"] = "IDLE"
             state["last_error"] = str(e)
-            print(f"Pipeline Error: {e}")
+            logger.error(f"Pipeline Error: {e}")
 
     background_tasks.add_task(process)
     return {"message": "Bắt đầu quy trình tự động (Chunk -> Embed -> Qdrant)..."}
@@ -330,21 +354,65 @@ async def run_crawl(background_tasks: BackgroundTasks):
     def process():
         import subprocess
         try:
-            print("🚀 Đang khởi chạy Crawler bài báo (Python Version)...")
-            result = subprocess.run(["python", "crawl_paper.py"], capture_output=True, text=True)
-            if result.returncode == 0:
-                print("✅ Crawl thành công!")
+            logger.info("🚀 Đang khởi chạy Crawler bài báo (Python Version)...")
+            # Sử dụng Popen để có thể điều khiển (dừng) từ xa
+            proc = subprocess.Popen(
+                ["python", "crawl_paper.py"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1
+            )
+            
+            # Lưu tiến trình vào bộ quản lý toàn cục để có thể dừng bằng /stop-crawl
+            active_processes["crawler"] = proc
+            
+            # Đọc từng dòng log từ script con và đẩy lên logger của main
+            if proc.stdout:
+                for line in iter(proc.stdout.readline, ""):
+                    if line:
+                        logger.info(line.strip())
+            
+            proc.wait()
+            # Dọn dẹp sau khi xong
+            active_processes.pop("crawler", None)
+            
+            if proc.returncode == 0:
+                logger.info("✅ Quy trình Crawler đã hoàn thành toàn bộ!")
+            elif proc.returncode == -15 or proc.returncode == -9:
+                logger.warning("⏹️ Crawler đã bị dừng bởi người dùng.")
             else:
-                print(f"❌ Crawl lỗi: {result.stderr}")
+                logger.error(f"❌ Crawler kết thúc với mã lỗi: {proc.returncode}")
+                
             state["status"] = "IDLE"
             state["progress"] = 100
         except Exception as e:
+            logger.error(f"❌ Lỗi hệ thống khi chạy Crawl: {e}")
             state["status"] = "IDLE"
-            state["last_error"] = str(e)
-            print(f"Crawl Process Error: {e}")
 
     background_tasks.add_task(process)
     return {"message": "Bắt đầu cào dữ liệu arXiv (Vui lòng theo dõi log)..."}
+
+@app.post("/stop-crawl")
+async def stop_crawl():
+    """Dừng tiến trình cào dữ liệu đang chạy."""
+    if "crawler" not in active_processes:
+        return {"message": "Không có tiến trình cào nào đang chạy."}
+    
+    try:
+        proc = active_processes["crawler"]
+        # Thử dừng nhẹ nhàng (SIGTERM)
+        proc.terminate()
+        
+        # Cập nhật trạng thái Dashboard ngay lập tức
+        state["status"] = "IDLE"
+        state["progress"] = 0
+        
+        logger.warning("⚠️ Đang yêu cầu dừng Crawler...")
+        return {"message": "Đã gửi yêu cầu dừng Crawler."}
+    except Exception as e:
+        logger.error(f"Lỗi khi dừng Crawler: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/run-generate-testset")
 async def run_generate_testset(background_tasks: BackgroundTasks):
@@ -357,18 +425,19 @@ async def run_generate_testset(background_tasks: BackgroundTasks):
     def process():
         import subprocess
         try:
-            print("🚀 Đang sinh bộ câu hỏi Ground Truth...")
-            result = subprocess.run(["python", "scripts/generate_testset.py"], capture_output=True, text=True)
+            logger.info("🚀 Đang sinh bộ câu hỏi Ground Truth...")
+            result = subprocess.run(["python", "scripts/generate_benchmark_queries.py"], capture_output=True, text=True)
             if result.returncode == 0:
-                print("✅ Đã sinh xong bộ testset nhân tạo!")
+                logger.info("✅ Đã sinh xong bộ testset nhân tạo!")
+                if result.stdout: logger.info(f"Output: {result.stdout}")
             else:
-                print(f"❌ Lỗi sinh testset: {result.stderr}")
+                logger.error(f"❌ Lỗi sinh testset: {result.stderr}")
             state["status"] = "IDLE"
             state["progress"] = 100
         except Exception as e:
             state["status"] = "IDLE"
             state["last_error"] = str(e)
-            print(f"Generate Testset error: {e}")
+            logger.error(f"Generate Testset error: {e}")
 
     background_tasks.add_task(process)
     return {"message": "Bắt đầu tạo câu hỏi chuẩn (Ground Truth)..."}

@@ -7,6 +7,7 @@ import pandas as pd
 import logging
 from datetime import datetime
 from shared.query_analyzer import QueryAnalyzer
+from shared.supabase_client import SupabaseManager
 
 logger = logging.getLogger("Benchmark")
 
@@ -25,8 +26,20 @@ class BenchmarkManager:
         return process.memory_info().rss / (1024 * 1024)
 
     def load_queries(self, file_path="backend/data/benchmark_queries.json"):
-        """Nạp danh sách câu hỏi từ file JSON. Hỗ trợ cả List[str] và List[dict]."""
+        """Nạp danh sách câu hỏi từ Supabase Database (Ưu tiên), hoặc từ file JSON cục bộ."""
+        # 1. Thử lấy từ Supabase trước
+        try:
+            sm = SupabaseManager()
+            db_queries = sm.get_benchmark_queries()
+            if db_queries and len(db_queries) > 0:
+                print(f"📦 Đã tải {len(db_queries)} câu hỏi Ground Truth từ Supabase Database!")
+                return db_queries
+        except Exception as e:
+            print(f"Không nạp được từ Supabase, chuyển sang đọc file local: {e}")
+
+        # 2. Đọc file local nếu Supabase lỗi hoặc trống
         if os.path.exists(file_path):
+            print(f"📂 Đang nạp từ file local: {file_path}")
             with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 # Chuyển đổi về dạng chuẩn: [{"question": "...", "ground_truth": "..."}]
@@ -40,6 +53,7 @@ class BenchmarkManager:
                             "ground_truth": item.get("ground_truth")
                         })
                 return queries
+        
         # Mặc định
         return [{"question": "What are the key findings?", "ground_truth": None}] * 10
 

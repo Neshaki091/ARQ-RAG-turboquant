@@ -14,7 +14,8 @@ import {
   CheckCircle2,
   Loader2,
   Trash2,
-  Terminal
+  Terminal,
+  Square
 } from "lucide-react";
 import {
   LineChart,
@@ -245,13 +246,24 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <button
-                onClick={() => runAction("run-crawl")}
-                disabled={!["IDLE", "COMPLETED"].includes(status.status)}
-                className="w-full bg-slate-800 hover:bg-slate-700 disabled:opacity-50 transition-colors rounded-lg py-3 flex items-center justify-center gap-2 font-medium border border-slate-700"
-              >
-                <Database size={18} /> Run Crawl data
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => runAction("run-crawl")}
+                  disabled={!["IDLE", "COMPLETED"].includes(status.status)}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 transition-colors rounded-lg py-3 flex items-center justify-center gap-2 font-medium border border-slate-700"
+                >
+                  <Database size={18} /> Run Crawl data
+                </button>
+                {!["IDLE", "COMPLETED"].includes(status.status) && (
+                  <button
+                    onClick={() => runAction("stop-crawl")}
+                    className="px-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-colors rounded-lg py-3 flex items-center justify-center gap-2 font-medium border border-red-500/20 shadow-lg shadow-red-500/5"
+                    title="Stop Current Task"
+                  >
+                    <Square size={16} fill="currentColor" /> Stop
+                  </button>
+                )}
+              </div>
 
               <button
                 onClick={() => runAction("run-auto-pipeline", { num_files: numFiles })}
@@ -508,13 +520,32 @@ export default function Dashboard() {
                 <Terminal size={16} className="text-emerald-500" />
                 Backend Live Logs
               </h3>
-              <div className="flex-1 overflow-y-auto space-y-1.5 custom-scrollbar pr-2 flex flex-col-reverse">
-                {[...(status?.logs || [])].reverse().map((log: string, i: number) => (
-                  <div key={i} className="text-slate-500 break-words leading-relaxed border-b border-slate-800/50 pb-1">
-                    <span className="text-emerald-500/50 mr-2 font-bold">❯</span>
-                    {log}
-                  </div>
-                ))}
+              <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar pr-2 flex flex-col-reverse">
+                {[...(status?.logs || [])].reverse().map((log: string, i: number) => {
+                  const parts = log.split(" | ");
+                  const time = parts[0];
+                  const module = parts[1];
+                  const level = parts[2];
+                  const message = parts.slice(3).join(" | ");
+
+                  const getLevelStyle = (lvl: string) => {
+                    switch (lvl?.trim()) {
+                      case "ERROR": return "text-red-400 font-bold bg-red-400/10 px-1 rounded";
+                      case "WARNING": return "text-yellow-400 font-bold bg-yellow-400/10 px-1 rounded";
+                      case "INFO": return "text-emerald-400/80";
+                      default: return "text-slate-500";
+                    }
+                  };
+
+                  return (
+                    <div key={i} className="py-1 text-[11px] border-b border-slate-800/30 font-mono flex gap-2 items-start leading-relaxed">
+                      <span className="text-slate-600 shrink-0">[{time}]</span>
+                      <span className="text-indigo-400/70 shrink-0 font-semibold w-20 truncate">[{module}]</span>
+                      <span className={`${getLevelStyle(level)} shrink-0 w-16 text-center`}>{level}</span>
+                      <span className="text-slate-300 break-words">{message}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

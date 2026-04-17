@@ -1,0 +1,11 @@
+Tiêu đề bài báo: LLaVA-FA: Learning Fourier Approximation for Compressing Large Multimodal Models
+Tác giả: Pengcheng Zheng, Chaoning Zhang, Jiarong Mo, GuoHui Li, Jiaquan Zhang, Jiahao Zhang, Sihan Cao, Sheng Zheng, Caiyan Qin, Guoqing Wang, Yang Yang
+Ngày xuất bản: 2026-01-28
+Nền tảng: arXiv
+Link gốc: http://arxiv.org/abs/2602.00135v1
+Link PDF: https://arxiv.org/pdf/2602.00135v1
+Link Lưu Trữ (Supabase): https://mcjacvpbbebjeokjsefm.supabase.co/storage/v1/object/public/papers/2602.00135v1_LLaVA-FA- Learning Fourier Approximation for Compr.pdf
+Chủ đề Crawler: TurboQuant
+
+--- TÓM TẮT (ABSTRACT) ---
+Large multimodal models (LMMs) have achieved impressive performance on various vision-language tasks, but their substantial computational and memory costs hinder their practical deployment. Existing compression methods often decouple low-rank decomposition and quantization, leading to compounded reconstruction errors, especially in multimodal architectures with cross-modal redundancy. To address this issue, we propose LLaVA-FA, a novel efficient LMM that performs joint low-rank plus quantization approximation in the frequency domain. By leveraging the de-correlation and conjugate symmetry properties of Fourier transform, LLaVA-FA achieves more compact and accurate weight representations. Furthermore, we introduce PolarQuant, a polar-coordinate quantization method tailored for complex matrices, and an optional diagonal calibration (ODC) scheme that eliminates the need for large-scale calibration data. Extensive experimental results demonstrate that our proposed LLaVA-FA outperforms existing efficient multimodal models across multiple benchmarks while maintaining minimal activated parameters and low computational costs, validating its effectiveness as a powerful solution for compressing LMMs.

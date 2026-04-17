@@ -1,117 +1,148 @@
 import os
 import json
-import time
 import asyncio
+import logging
+import random
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
-from tqdm import tqdm
+import sys
+
+# Đảm bảo có thể import module từ thư mục cha
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+from shared.supabase_client import SupabaseManager
 
 load_dotenv()
 
-async def generate_questions():
-    # 1. Load data
-    data_path = "backend/data/chunks.json"
-    output_path = "backend/data/benchmark_queries.json"
+# Thiết lập Logger để hiện lên UI Dashboard
+logger = logging.getLogger("Benchmark")
+
+async def generate_benchmark_topic_based():
+    sm = SupabaseManager()
+    
+    # 1. Tải danh sách Chunks
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(current_dir, "..", "data", "chunks.json")
     
     if not os.path.exists(data_path):
-        print(f"Error: {data_path} not found")
+        logger.error(f"❌ Không tìm thấy {data_path}. Vui lòng chạy Ingest trước.")
         return
 
     with open(data_path, "r", encoding="utf-8") as f:
-        chunks = json.load(f)
+        all_chunks = json.load(f)
 
-    # 2. Check existing queries to resume
-    existing_queries = []
-    if os.path.exists(output_path):
-        with open(output_path, "r", encoding="utf-8") as f:
-            try:
-                existing_queries = json.load(f)
-            except:
-                existing_queries = []
+    # 2. Lấy danh sách bài báo đã được Embed thành công từ Database
+    papers = sm.get_all_papers()
+    embedded_paper_ids = {p["id"] for p in papers if p.get("is_embedded")}
     
-    if len(existing_queries) >= 500:
-        print(f"Benchmark queries already have {len(existing_queries)} questions. Done.")
+    if not embedded_paper_ids:
+        logger.warning("⚠️ Không tìm thấy bài báo nào có trạng thái 'is_embedded = True'.")
+        logger.info("Gợi ý: Cần chạy quy trình Ingest/Embed cho các PDF đã cào trước khi sinh bộ đề.")
         return
 
-    print(f"Current questions: {len(existing_queries)}. Generating more to reach 500...")
+    # Lọc chunks chỉ lấy từ các bài báo đã embed
+    valid_chunks = [c for c in all_chunks if c.get("file", "").split("_")[0] in embedded_paper_ids]
+    
+    if not valid_chunks:
+        logger.error("❌ Không có chunk nào từ các bài báo đã embed.")
+        return
 
-    # 3. Setup LLM
-    llm = ChatGoogleGenerativeAI(model="models/gemini-3.1-flash-lite-preview", google_api_key=os.getenv("GOOGLE_API_KEY"))
+    # 3. Phân nhóm Chunks theo Topic
+    # Nếu chunk chưa có nhãn topic (do chưa chạy Ingest mới), ta tra cứu từ Database
+    topic_map = {p["id"]: p["topic"] for p in papers}
+    
+    chunks_by_topic = {}
+    for c in valid_chunks:
+        arxiv_id = c.get("file", "").split("_")[0]
+        topic = c.get("topic") or topic_map.get(arxiv_id, "General")
+        if topic not in chunks_by_topic:
+            chunks_by_topic[topic] = []
+        chunks_by_topic[topic].append(c)
+
+    logger.info(f"📊 Đã sẵn sàng dữ liệu cho {len(chunks_by_topic)} nhóm chủ đề.")
+
+    # 4. Khởi tạo LLM (Groq Llama 3.3 70B)
+    llm = ChatGroq(
+        model="llama-3.3-70b-versatile",
+        api_key=os.getenv("GROQ_API_KEY"),
+        temperature=0.3
+    )
 
     prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are a research assistant specializing in Wireless Communication and MIMO-ARQ. "
-                   "Based on the following document chunk, generate {num_questions} diverse and high-quality technical questions. "
-                   "The questions should be a mix of English and Vietnamese. "
-                   "Format your response as a JSON list of strings."),
-        ("human", "Document content: {content}")
+        ("system", "You are an elite research evaluator. Based on the provided research paper fragments (chunks), "
+                   "generate ONE high-quality technical question and its precise ground truth answer. "
+                   "The question must be challenging and suitable for academic benchmarking. "
+                   "Focus on the methodology, results, or specific technical innovations mentioned. "
+                   "Format your response as a valid JSON object: "
+                   '{{"question": "...", "ground_truth": "..."}}'),
+        ("human", "Topic: {topic}\n\nContext Chunks:\n{context}")
     ])
 
     chain = prompt | llm
 
-    # 4. Generate loop
-    target_count = 500
-    queries = existing_queries
-    
-    # Calculate how many questions per chunk on average
-    remaining = target_count - len(queries)
-    questions_per_chunk = max(3, (remaining // len(chunks)) + 1)
+    # 5. Vòng lặp sinh theo từng Topic
+    TOPICS = ["TurboQuant", "ARQ", "PQ", "RAG", "ML_Optimization", "LLM_Inference"]
+    TARGET_PER_TOPIC = 100
 
-    pbar = tqdm(total=target_count)
-    pbar.update(len(queries))
+    # Lấy thống kê hiện tại từ Supabase
+    existing_queries = sm.get_benchmark_queries()
+    topic_counts = {}
+    for q in existing_queries:
+        t = q.get("topic", "General")
+        topic_counts[t] = topic_counts.get(t, 0) + 1
 
-    for chunk in chunks:
-        if len(queries) >= target_count:
-            break
-            
-        content = chunk.get("content", "")
-        if len(content) < 100:
+    for topic in TOPICS:
+        current_count = topic_counts.get(topic, 0)
+        if current_count >= TARGET_PER_TOPIC:
+            logger.info(f"✅ Nhóm [{topic}] đã đủ {current_count} câu hỏi. Bỏ qua.")
             continue
 
-        try:
-            num_to_gen = min(questions_per_chunk, target_count - len(queries))
-            response = await chain.ainvoke({"content": content, "num_questions": num_to_gen})
-            
-            # Extract JSON list from response
-            text = response.content
-            # Handle if text is a list of blocks (unlikely but safe)
-            if isinstance(text, list):
-                text = " ".join([str(item) for item in text])
-                
-            if "```json" in text:
-                text = text.split("```json")[1].split("```")[0]
-            elif "```" in text:
-                text = text.split("```")[1].split("```")[0]
-            
-            cleaned_text = text.strip()
-            # If the user included extra text before/after the list, try to find the [ ]
-            if "[" in cleaned_text and "]" in cleaned_text:
-                start = cleaned_text.find("[")
-                end = cleaned_text.rfind("]") + 1
-                cleaned_text = cleaned_text[start:end]
+        topic_chunks = chunks_by_topic.get(topic, [])
+        if not topic_chunks:
+            logger.warning(f"⚠️ Nhóm [{topic}] không có dữ liệu (chưa cào bài báo nào?).")
+            continue
 
-            new_questions = json.loads(cleaned_text)
-            
-            if isinstance(new_questions, list):
-                for q in new_questions:
-                    if len(queries) < target_count:
-                        queries.append(q)
-                        pbar.update(1)
-            
-            # Save progress incrementally
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(queries, f, ensure_ascii=False, indent=4)
-                
-            # Rate limiting / polite delay
-            await asyncio.sleep(1)
-            
-        except Exception as e:
-            print(f"Error processing chunk: {e}")
-            await asyncio.sleep(2)
+        needed = TARGET_PER_TOPIC - current_count
+        logger.info(f"🚀 Bắt đầu sinh thêm {needed} câu hỏi cho nhóm [{topic}]...")
 
-    pbar.close()
-    print(f"Finished! Total questions in {output_path}: {len(queries)}")
+        for i in range(needed):
+            try:
+                # Chọn 2-3 chunk ngẫu nhiên từ nhóm để làm ngữ cảnh sinh 1 câu
+                # (Đảm bảo tính đa dạng thay vì chỉ dùng 1 chunk)
+                sample_chunks = random.sample(topic_chunks, min(2, len(topic_chunks)))
+                context_text = "\n\n---\n\n".join([c["content"] for c in sample_chunks])
+                source_files = list(set(c["file"] for c in sample_chunks))
+
+                # Gọi AI
+                response = await chain.ainvoke({"topic": topic, "context": context_text})
+                
+                # Parse JSON
+                content = response.content
+                if "```json" in content:
+                    content = content.split("```json")[1].split("```")[0]
+                elif "```" in content:
+                    content = content.split("```")[1].split("```")[0]
+                
+                data = json.loads(content.strip())
+                
+                if "question" in data and "ground_truth" in data:
+                    # Lưu trực tiếp lên Supabase (Sinh 1 Lưu 1)
+                    sm.save_single_benchmark_query(
+                        question=data["question"],
+                        ground_truth=data["ground_truth"],
+                        topic=topic,
+                        source_files=source_files
+                    )
+                    logger.info(f"   [{topic}] Tiến độ: {current_count + i + 1}/{TARGET_PER_TOPIC}")
+                
+                # Rate limit safety (Groq free tier has TPM limits)
+                await asyncio.sleep(2)
+
+            except Exception as e:
+                logger.error(f"❌ Lỗi khi sinh câu hỏi nhóm {topic}: {e}")
+                await asyncio.sleep(5)
+
+    logger.info("🎉 HOÀN THÀNH TOÀN BỘ QUY TRÌNH SINH GROUND TRUTH!")
 
 if __name__ == "__main__":
-    asyncio.run(generate_questions())
+    asyncio.run(generate_benchmark_topic_based())

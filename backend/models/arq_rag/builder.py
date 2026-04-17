@@ -31,9 +31,23 @@ class ARQBuilder:
         Y = np.dot(X_norm, self.tq_prod.tq_mse.Pi.T)
         y_flat = Y.flatten().reshape(-1, 1)
         
-        kmeans = faiss.Kmeans(d=1, k=self.tq_prod.tq_mse.num_centroids, niter=20)
-        kmeans.train(y_flat)
-        centroids = np.sort(kmeans.centroids.flatten())
+        n_points = y_flat.shape[0]
+        k_target = self.tq_prod.tq_mse.num_centroids
+        
+        # Bảo vệ: Nếu số lượng điểm ít hơn số cluster mong muốn
+        if n_points < k_target:
+            k = max(2, n_points // 2) if n_points > 4 else 2
+            # Nếu chỉ có rất ít điểm, không cần Kmeans, lấy giá trị trung bình
+            if n_points < 2:
+                centroids = np.array([-0.1, 0.1], dtype='float32')
+            else:
+                kmeans = faiss.Kmeans(d=1, k=k, niter=20)
+                kmeans.train(y_flat)
+                centroids = np.sort(kmeans.centroids.flatten())
+        else:
+            kmeans = faiss.Kmeans(d=1, k=k_target, niter=20)
+            kmeans.train(y_flat)
+            centroids = np.sort(kmeans.centroids.flatten())
         
         os.makedirs("backend/data", exist_ok=True)
         np.save("backend/data/centroids.npy", centroids)

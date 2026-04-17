@@ -27,8 +27,9 @@ class TestsetGenerator:
             temperature=0.7 # Tăng nhiệt độ để câu hỏi đa dạng hơn
         )
         
-        self.chunks_path = "backend/data/chunks.json"
-        self.output_path = "backend/data/benchmark_queries_synthetic.json"
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        self.chunks_path = os.path.join(current_dir, "..", "data", "chunks.json")
+        self.output_path = os.path.join(current_dir, "..", "data", "benchmark_queries_synthetic.json")
 
     def load_chunks(self) -> List[Dict]:
         if not os.path.exists(self.chunks_path):
@@ -100,4 +101,4 @@ Yêu cầu:
 
 if __name__ == "__main__":
     generator = TestsetGenerator()
-    asyncio.run(generator.run(num_samples=5)) # Chạy thử 5 câu mẫu
+    asyncio.run(generator.run(num_samples=50)) # Đã đổi thành sinh 50 câu (hoặc sửa thành giá trị lớn hơn tùy nhu cầu)

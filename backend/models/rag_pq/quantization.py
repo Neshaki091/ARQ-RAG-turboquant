@@ -12,11 +12,25 @@ class ManualPQ:
 
     def train(self, X):
         X = X.astype('float32')
+        n_data = X.shape[0]
+        
+        # Điều chỉnh k linh hoạt: không được vượt quá số lượng điểm dữ liệu
+        k_actual = min(self.k, n_data)
+        if k_actual < 1: return # Không có dữ liệu để huấn luyện
+        
+        self.centroids = []
         for i in range(self.m):
             sub_X = X[:, i*self.ds : (i+1)*self.ds]
-            kmeans = faiss.Kmeans(d=self.ds, k=self.k, niter=20, verbose=False)
-            kmeans.train(sub_X)
-            self.centroids.append(kmeans.centroids)
+            # Faiss Kmeans cần ít nhất k điểm
+            if n_data >= k_actual and k_actual >= 2:
+                kmeans = faiss.Kmeans(d=self.ds, k=k_actual, niter=20, verbose=False)
+                kmeans.train(sub_X)
+                self.centroids.append(kmeans.centroids)
+            else:
+                # Fallback: Sử dụng chính các điểm dữ liệu làm centroids nếu quá ít
+                padding = np.zeros((max(0, k_actual - n_data), self.ds), dtype='float32')
+                fallback_centroids = np.vstack([sub_X, padding]) if n_data > 0 else np.zeros((k_actual, self.ds), dtype='float32')
+                self.centroids.append(fallback_centroids)
 
     def quantize(self, X):
         N = X.shape[0]

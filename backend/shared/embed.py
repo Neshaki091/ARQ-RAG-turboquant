@@ -2,7 +2,10 @@ import os
 import json
 import numpy as np
 import httpx
+import logging
 from tqdm import tqdm
+
+logger = logging.getLogger("Embedding")
 
 class EmbeddingManager:
     def __init__(self, data_dir="data", ollama_url=None):
@@ -25,13 +28,13 @@ class EmbeddingManager:
                 response = client.post(self.ollama_url, json=payload)
                 return response.json()["embedding"]
         except Exception as e:
-            print(f"Lỗi khi lấy embedding từ Ollama: {e}")
+            logger.error(f"Lỗi khi lấy embedding từ Ollama: {e}")
             # Trả về vector ngẫu nhiên nếu Ollama chưa sẵn sàng (chỉ để demo)
             return np.random.rand(768).tolist()
 
     def run_embedding(self, on_progress=None):
         if not os.path.exists(self.chunks_file):
-            print("Không tìm thấy chunks.json")
+            logger.error("Không tìm thấy chunks.json")
             return None, None
 
         with open(self.chunks_file, "r", encoding="utf-8") as f:
@@ -47,12 +50,12 @@ class EmbeddingManager:
         
         # Kiểm tra nếu số lượng embedding lớn hơn số lượng chunks (mất đồng bộ)
         if start_idx > total:
-            print(f"Cảnh báo: Phát hiện mất đồng bộ! Số lượng embedding ({start_idx}) > số lượng chunks ({total}).")
-            print("Đang tiến hành embed lại từ đầu để đảm bảo tính nhất quán...")
+            logger.warning(f"Phát hiện mất đồng bộ! Số lượng embedding ({start_idx}) > số lượng chunks ({total}).")
+            logger.info("Đang tiến hành embed lại từ đầu để đảm bảo tính nhất quán...")
             existing_embeddings = []
             start_idx = 0
         
-        print(f"Đang tiến hành embed từ index {start_idx}/{total}...")
+        logger.info(f"Đang tiến hành embed từ index {start_idx}/{total}...")
         
         if on_progress:
             on_progress(start_idx, total)
@@ -70,7 +73,7 @@ class EmbeddingManager:
                 on_progress(i + 1, total)
 
         np.save(self.embeddings_file, np.array(new_embeddings))
-        print(f"Hoàn thành! Tổng cộng: {len(new_embeddings)} embeddings.")
+        logger.info(f"Hoàn thành! Tổng cộng: {len(new_embeddings)} embeddings.")
         return chunks, np.array(new_embeddings)
 
     def load_embeddings(self):

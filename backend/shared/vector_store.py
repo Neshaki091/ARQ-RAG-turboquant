@@ -15,7 +15,7 @@ class VectorStoreManager:
         """Khởi tạo một collection với cấu hình nhận được từ Model Builder."""
         exists = self.client.collection_exists(name)
         if not exists:
-            print(f"Đang tạo collection modular: {name}...")
+            logger.info(f"Đang tạo collection modular: {name}...")
             
             quantization = storage_config.get("quantization") if storage_config else None
             hnsw = storage_config.get("hnsw") if storage_config else None
@@ -54,7 +54,7 @@ class VectorStoreManager:
                 )
             )
 
-        print(f"Đang upsert {len(points)} point vào {name}...")
+        logger.info(f"Đang upsert {len(points)} point vào {name}...")
         self.client.upsert(
             collection_name=name,
             points=points
@@ -83,8 +83,8 @@ class VectorStoreManager:
         for name in collections:
             try:
                 if self.client.collection_exists(name):
-                    print(f"Đang xóa collection: {name}...")
+                    logger.info(f"Đang xóa collection: {name}...")
                     self.client.delete_collection(name)
             except Exception as e:
-                print(f"Lỗi khi xóa collection {name}: {e}")
+                logger.error(f"Lỗi khi xóa collection {name}: {e}")
         return True

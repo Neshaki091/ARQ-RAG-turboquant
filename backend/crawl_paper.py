@@ -8,6 +8,10 @@ from pathlib import Path
 from dotenv import load_dotenv
 from supabase import create_client, Client
 import xml.etree.ElementTree as ET
+import logging
+
+# Thiết lập Logging cho UI
+logger = logging.getLogger("Crawler")
 
 # Load environment variables
 load_dotenv(dotenv_path=Path(__file__).parent.parent / ".env")
@@ -40,7 +44,7 @@ def extract_id(url: str) -> str:
     return url.split('/')[-1] if url else "unknown"
 
 async def crawl_arxiv():
-    print(f"🔍 Bắt đầu cào ~{TARGET_TOTAL} bài báo từ arXiv (PYTHON VERSION)...\n")
+    logger.info(f"🔍 Bắt đầu cào ~{TARGET_TOTAL} bài báo từ arXiv (PYTHON VERSION)...")
     
     METADATA_DIR.mkdir(parents=True, exist_ok=True)
     
@@ -48,25 +52,39 @@ async def crawl_arxiv():
     try:
         buckets = supabase.storage.list_buckets()
         if not any(b.name == 'papers' for b in buckets):
-            print("⚠️ Bucket 'papers' chưa tồn tại. Đang tạo...")
+            logger.info("⚠️ Bucket 'papers' chưa tồn tại. Đang tạo...")
             supabase.storage.create_bucket('papers', options={'public': True})
     except Exception as e:
-        print(f"⚠️ Cảnh báo khi kiểm tra bucket: {e}")
+        logger.warning(f"⚠️ Cảnh báo khi kiểm tra bucket: {e}")
 
     total_saved = 0
     saved_ids = set()
     max_per_query = 300
-    
-    async with httpx.AsyncClient(timeout=60.0) as client:
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8"
+    }
+
+    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True, headers=headers) as client:
         for q in QUERIES:
             if total_saved >= TARGET_TOTAL: break
             
-            print(f"\n⏳ Đang tìm kiếm chủ đề: [{q['name']}]...")
+            logger.info(f"\n⏳ Đang tìm kiếm chủ đề: [{q['name']}]...")
+            # Nghỉ 5s giữa các topic để tránh 429
+            await asyncio.sleep(5)
+            
             encoded_query = urllib.parse.quote(q['query'])
-            api_url = f"http://export.arxiv.org/api/query?search_query={encoded_query}&start=0&max_results={max_per_query}&sortBy=relevance&sortOrder=descending"
+            api_url = f"https://export.arxiv.org/api/query?search_query={encoded_query}&start=0&max_results={max_per_query}&sortBy=relevance&sortOrder=descending"
             
             try:
+                # Không truyền follow_redirects vào đây vì đã cấu hình ở AsyncClient
                 res = await client.get(api_url)
+                
+                if res.status_code == 429:
+                    logger.warning("⚠️ Bị giới hạn truy cập (429). Đang nghỉ 60 giây...")
+                    await asyncio.sleep(60)
+                    res = await client.get(api_url)
+                
                 res.raise_for_status()
                 
                 # Parse XML Atom Feed
@@ -102,31 +120,41 @@ async def crawl_arxiv():
                     if arxiv_id in saved_ids: continue
                     saved_ids.add(arxiv_id)
                     
-                    pdf_url = f"https://arxiv.org/pdf/{arxiv_id}.pdf"
+                    # URL PDF chuẩn của ArXiv không có phần mở rộng .pdf ở cuối để tránh Redirect 301
+                    pdf_url = f"https://arxiv.org/pdf/{arxiv_id}"
                     base_filename = f"{arxiv_id}_{clean_filename(title)[:50]}"
                     pdf_filename = f"{base_filename}.pdf"
                     
                     # Get Public URL from Supabase
                     supabase_url_link = f"{SUPABASE_URL}/storage/v1/object/public/papers/{pdf_filename}"
                     
-                    print(f" 📥 Đang tải PDF: {arxiv_id} ({count_for_query + 1}) - {title[:30]}...")
+                    logger.info(f"📥 Đang tải PDF: {arxiv_id} - {title[:50]}...")
                     
                     try:
+                        # Loại bỏ follow_redirects=True ở đây để tránh lỗi Header type
                         pdf_res = await client.get(pdf_url)
+                        
+                        if pdf_res.status_code == 429:
+                            logger.warning("⚠️ Bị giới hạn tải PDF. Nghỉ 30 giây...")
+                            await asyncio.sleep(30)
+                            pdf_res = await client.get(pdf_url)
+                            
                         if pdf_res.status_code == 200:
-                            # Upload to Supabase
-                            print(f"   ⬆️ Đang Upload PDF lên Supabase Storage...")
+                            # Upload to Supabase Storage
+                            logger.info(f"   ⬆️ Đang Upload PDF lên Supabase Storage...")
                             upload_res = supabase.storage.from_("papers").upload(
                                 path=pdf_filename,
                                 file=pdf_res.content,
-                                file_options={"content-type": "application/pdf", "upsert": True}
+                                file_options={"content-type": "application/pdf", "upsert": "true"}
                             )
                             # Kiểm tra nếu kết quả trả về có lỗi (tùy phiên bản SDK)
                             if hasattr(upload_res, 'error') and upload_res.error:
-                                print(f"   ❌ Lỗi Upload: {upload_res.error}")
+                                logger.error(f"   ❌ Lỗi Upload: {upload_res.error}")
                                 continue
 
-                            # Save Metadata TXT
+                            # Lưu Metadata TXT
+                            
+                            # Lưu Metadata TXT
                             txt_content = f"""Tiêu đề bài báo: {title}
 Tác giả: {', '.join(authors)}
 Ngày xuất bản: {published}
@@ -139,28 +167,41 @@ Chủ đề Crawler: {q['name']}
 --- TÓM TẮT (ABSTRACT) ---
 {summary}
 """
+                            # Lưu Metadata vào Database (Khớp với Schema: id, topic, url)
+                            try:
+                                supabase.table("papers").upsert({
+                                    "id": arxiv_id,
+                                    "title": title,
+                                    "topic": q['name'],
+                                    "url": pdf_url,
+                                    "is_embedded": False
+                                }).execute()
+                                logger.info(f"   📊 Metadata đã đồng bộ lên Database.")
+                            except Exception as db_err:
+                                logger.warning(f"   ⚠️ Không thể lưu metadata vào DB: {db_err}")
+
                             txt_path = METADATA_DIR / f"{base_filename}.txt"
                             with open(txt_path, "w", encoding="utf-8") as f:
                                 f.write(txt_content)
                                 
-                            print(f"   ✅ Đã xử lý xong bài báo.")
+                            logger.info(f"   ✅ [Hoàn tất] Đã xử lý xong bài báo: {title[:70]}...")
                             count_for_query += 1
                             total_saved += 1
                         else:
-                            print(f"   ❌ Bỏ qua PDF (lỗi HTTP {pdf_res.status_code})")
+                            logger.error(f"   ❌ Bỏ qua PDF (lỗi HTTP {pdf_res.status_code})")
                             
                     except Exception as e:
-                        print(f"   ❌ Lỗi khi tải/upload: {e}")
+                        logger.error(f"   ❌ Lỗi khi tải/upload: {e}")
                     
-                    # Delay 2s to avoid ban
-                    await asyncio.sleep(2.0)
+                    # Delay 5s để tránh bị ban (ArXiv rất nhạy cảm)
+                    await asyncio.sleep(5.0)
                 
-                print(f"✅ Đã cào xong {count_for_query} bài báo cho [{q['name']}]. Tổng: {total_saved}/{TARGET_TOTAL}")
+                logger.info(f"✅ Đã cào xong {count_for_query} bài báo cho [{q['name']}]. Tổng: {total_saved}/{TARGET_TOTAL}")
                 
             except Exception as e:
-                print(f"❌ Lỗi API khi tìm [{q['name']}]: {e}")
+                logger.error(f"❌ Lỗi API khi tìm [{q['name']}]: {e}")
 
-    print(f"\n🎉 HOÀN THÀNH TOÀN BỘ! Đã tải {total_saved} bài báo.")
+    logger.info(f"\n🎉 HOÀN THÀNH TOÀN BỘ! Đã tải {total_saved} bài báo.")
 
 if __name__ == "__main__":
     asyncio.run(crawl_arxiv())
