@@ -14,8 +14,7 @@ import {
   CheckCircle2,
   Loader2,
   Trash2,
-  Terminal,
-  Square
+  Terminal
 } from "lucide-react";
 import {
   LineChart,
@@ -34,7 +33,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
-const API_BASE = "/api";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
 
 export default function Dashboard() {
   const [status, setStatus] = useState<any>({ status: "IDLE", progress: 0 });
@@ -43,6 +42,11 @@ export default function Dashboard() {
   const [metricsHistory, setMetricsHistory] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [benchmarkBatchSize, setBenchmarkBatchSize] = useState(20);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Chat State
   const [messages, setMessages] = useState<any[]>([]);
@@ -484,7 +488,8 @@ export default function Dashboard() {
                 Real-time Resource Monitor
               </h3>
               <div className="w-full h-[300px] min-h-[300px] relative">
-                <ResponsiveContainer width="100%" height="100%">
+                {isMounted && (
+                  <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={metricsHistory}>
                     <defs>
                       <linearGradient id="colorRam" x1="0" y1="0" x2="0" y2="1">
@@ -515,6 +520,7 @@ export default function Dashboard() {
                     />
                   </AreaChart>
                 </ResponsiveContainer>
+                )}
               </div>
             </div>
 
