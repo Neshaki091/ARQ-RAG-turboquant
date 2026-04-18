@@ -294,17 +294,12 @@ def main():
             embeddings = get_embeddings_batch([c['content'] for c in chunks], O_URL)
             emb_array = np.array(embeddings, dtype='float32')
 
-            # 5 Models Ingestion
+            # 5 Models Ingestion -> Optimized to 4 (Adaptive uses RAW)
             
-            # 1. RAW
+            # 1. RAW (Used by both Standard and Adaptive RAG)
             vector_store.ensure_collection("vector_raw")
             vector_store.upsert("vector_raw", chunks, embeddings)
-            logger.info("   - RAW collection updated.")
-
-            # 2. Adaptive
-            vector_store.ensure_collection("vector_adaptive")
-            vector_store.upsert("vector_adaptive", chunks, embeddings)
-            logger.info("   - Adaptive collection updated.")
+            logger.info("   - RAW collection updated (Standard & Adaptive).")
 
             # 3. SQ8
             sq8 = ManualSQ8(d=768)
