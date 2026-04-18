@@ -34,7 +34,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_BASE = "/api";
 
 export default function Dashboard() {
   const [status, setStatus] = useState<any>({ status: "IDLE", progress: 0 });
@@ -262,17 +262,17 @@ export default function Dashboard() {
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => runAction("run-crawl")}
+                  onClick={() => runAction("run-crawl-gh")}
                   disabled={!["IDLE", "COMPLETED"].includes(status.status)}
                   className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 transition-colors rounded-lg py-3 flex items-center justify-center gap-2 font-medium border border-slate-700"
                 >
-                  <Database size={18} /> Run Crawl data
+                  <Database size={18} /> Run Crawl (GitHub)
                 </button>
                 {!["IDLE", "COMPLETED"].includes(status.status) && (
                   <button
-                    onClick={() => runAction("stop-crawl")}
+                    onClick={() => runAction("stop-crawl-gh")}
                     className="px-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-colors rounded-lg py-3 flex items-center justify-center gap-2 font-medium border border-red-500/20 shadow-lg shadow-red-500/5"
-                    title="Stop Current Task"
+                    title="Stop GitHub Crawler"
                   >
                     <Square size={16} fill="currentColor" /> Stop
                   </button>
@@ -502,7 +502,7 @@ export default function Dashboard() {
                 <Cpu size={20} className="text-indigo-400" />
                 Real-time Resource Monitor
               </h3>
-              <div className="w-full h-[300px]">
+              <div className="w-full h-[300px] min-h-[300px] relative">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={metricsHistory}>
                     <defs>

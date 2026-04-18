@@ -1,7 +1,0 @@
-Tiêu đề: Rethinking Reliability Using Network Coding: a Practical 5G Evaluation
-Tác giả: Laura Landon, Vipindev Adat Vasudevan, Junmo Sung, Muriel Médard
-Ngày: 2025-08-14
-Link: https://export.arxiv.org/pdf/2508.10247v1
-Chủ đề: ARQ
-
-Abstract: This work presents the design and implementation of a real-time network coding system integrated into the IP layer of a 5G testbed, offering an alternative to conventional retransmission-based reliability mechanisms such as ARQ and HARQ. Using a netfilter-based packet interception framework, we inject forward erasure correction using Random Linear Network Coding (RLNC) into live traffic between a gNB and UE over a 3GPP RF link. We evaluate a block coding scheme, analyzing its impact on throughput, jitter, and resource usage. Results show that with appropriate code rate selection, RLNC can fully recover from packet losses using fewer transmissions than ARQ/HARQ and maintain a high throughput, particularly under moderate-to-high packet loss rates. These findings demonstrate that network coding can effectively replace retransmission-based reliability in future wireless systems, with the potential for more efficient resource utilization.

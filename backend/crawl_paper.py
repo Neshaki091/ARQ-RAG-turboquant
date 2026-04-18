@@ -25,7 +25,6 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     exit(1)
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-METADATA_DIR = Path(__file__).parent / "document" / "metadata"
 
 TARGET_TOTAL = 1100
 QUERIES = [
@@ -45,9 +44,18 @@ def extract_id(url: str) -> str:
     if not url: return "unknown"
     return url.split('/')[-1]
 
+def check_stop_signal() -> bool:
+    """Kiểm tra tín hiệu dừng từ Supabase."""
+    try:
+        res = supabase.table("system_config").select("value").eq("key", "crawler_stop_signal").execute()
+        if res.data and len(res.data) > 0:
+            return res.data[0]["value"] == "true"
+    except Exception:
+        pass
+    return False
+
 async def crawl_arxiv():
     logger.info(f"🔍 Bắt đầu cào ~{TARGET_TOTAL} bài báo từ arXiv...")
-    METADATA_DIR.mkdir(parents=True, exist_ok=True)
     
     # Đảm bảo bucket 'papers' tồn tại
     try:
@@ -79,6 +87,11 @@ async def crawl_arxiv():
         for q in QUERIES:
             if total_saved >= TARGET_TOTAL: break
             
+            # Kiểm tra tín hiệu dừng
+            if check_stop_signal():
+                logger.warning("🛑 Nhận tín hiệu dừng từ hệ thống. Đang dừng Crawler...")
+                return
+
             logger.info(f"\n⏳ Đang tìm kiếm chủ đề: [{q['name']}]...")
             count_for_topic = 0
             
@@ -108,6 +121,11 @@ async def crawl_arxiv():
                     for entry in entries:
                         if total_saved >= TARGET_TOTAL: break
                         
+                        # Kiểm tra tín hiệu dừng mỗi khi xử lý bài mới
+                        if check_stop_signal():
+                            logger.warning("🛑 Nhận tín hiệu dừng từ hệ thống. Đang dừng Crawler...")
+                            return
+
                         ns = {'atom': 'http://www.w3.org/2005/Atom'}
                         
                         id_elem = entry.find('atom:id', ns)
@@ -173,11 +191,6 @@ async def crawl_arxiv():
                                         "is_embedded": False
                                     }).execute()
                                     
-                                    # Lưu Metadata TXT cục bộ làm backup
-                                    txt_content = f"Tiêu đề: {title}\nTác giả: {', '.join(authors)}\nNgày: {published}\nLink: {pdf_url}\nChủ đề: {q['name']}\n\nAbstract: {summary}"
-                                    with open(METADATA_DIR / f"{arxiv_id}.txt", "w", encoding="utf-8") as f:
-                                        f.write(txt_content)
-
                                     saved_ids_in_session.add(arxiv_id)
                                     count_for_topic += 1
                                     total_saved += 1

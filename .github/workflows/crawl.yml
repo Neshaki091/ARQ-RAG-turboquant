@@ -1,0 +1,30 @@
+name: arXiv Paper Crawler
+
+on:
+  workflow_dispatch:
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install httpx python-dotenv supabase
+
+      - name: Run Crawler
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Path to the .env file if the script expects it, but we'll override env vars directly
+        run: |
+          # Inject env vars directly to bypass .env file requirement in GH Actions
+          export PYTHONPATH=$PYTHONPATH:$(pwd)/backend
+          python backend/crawl_paper.py

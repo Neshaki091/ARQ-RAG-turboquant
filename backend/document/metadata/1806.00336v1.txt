@@ -1,7 +1,0 @@
-Tiêu đề: A Reinforcement Learning Approach to Age of Information in Multi-User Networks
-Tác giả: Elif Tuğçe Ceran, Deniz Gündüz, András György
-Ngày: 2018-06-01
-Link: https://export.arxiv.org/pdf/1806.00336v1
-Chủ đề: ARQ
-
-Abstract: Scheduling the transmission of time-sensitive data to multiple users over error-prone communication channels is studied with the goal of minimizing the long-term average age of information (AoI) at the users under a constraint on the average number of transmissions at the source node. After each transmission, the source receives an instantaneous ACK/NACK feedback from the intended receiver and decides on what time and to which user to transmit the next update. The optimal scheduling policy is first studied under different feedback mechanisms when the channel statistics are known; in particular, the standard automatic repeat request (ARQ) and hybrid ARQ (HARQ) protocols are considered. Then a reinforcement learning (RL) approach is introduced, which does not assume any a priori information on the random processes governing the channel states. Different RL methods are verified and compared through numerical simulations.

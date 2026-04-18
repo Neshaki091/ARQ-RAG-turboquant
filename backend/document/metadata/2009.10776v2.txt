@@ -1,7 +1,0 @@
-Tiêu đề: On Hybrid-ARQ-Based Intelligent Reflecting Surface-Assisted Communication System
-Tác giả: Y. Ai, M. Mohamed, L. Kong, A. Al-Samen, M. Cheffena
-Ngày: 2020-09-22
-Link: https://export.arxiv.org/pdf/2009.10776v2
-Chủ đề: ARQ
-
-Abstract: The intelligent reflecting surface (IRS) is an emerging technique to extend the wireless coverage. In this letter, the performance of hybrid automatic repeat request (hybrid-ARQ) for an IRS-assisted system is analyzed. More specifically, the outage performance of the IRS-aided system using hybrid-ARQ protocol with chase combining is studied. Asymptotic analysis also shows that the outage performance improves better than linearly by increasing number of reflectors of the IRS-aided system. The results also verify the potential of combining the ARQ scheme in the link layer of the IRS-aided system and demonstrate that very small change of path loss condition can impact the performance largely.

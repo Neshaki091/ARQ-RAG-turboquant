@@ -1,7 +1,0 @@
-Tiêu đề: Using Channel Output Feedback to Increase Throughput in Hybrid-ARQ
-Tác giả: Mayur Agrawal, Zachary Chance, David J. Love, Venkataramanan Balakrishnan
-Ngày: 2011-04-14
-Link: https://export.arxiv.org/pdf/1104.2861v5
-Chủ đề: ARQ
-
-Abstract: Hybrid-ARQ protocols have become common in many packet transmission systems due to their incorporation in various standards. Hybrid-ARQ combines the normal automatic repeat request (ARQ) method with error correction codes to increase reliability and throughput. In this paper, we look at improving upon this performance using feedback information from the receiver, in particular, using a powerful forward error correction (FEC) code in conjunction with a proposed linear feedback code for the Rayleigh block fading channels. The new hybrid-ARQ scheme is initially developed for full received packet feedback in a point-to-point link. It is then extended to various different multiple-antenna scenarios (MISO/MIMO) with varying amounts of packet feedback information. Simulations illustrate gains in throughput.

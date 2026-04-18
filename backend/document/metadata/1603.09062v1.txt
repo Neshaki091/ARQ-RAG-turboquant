@@ -1,7 +1,0 @@
-Tiêu đề: FPGA Impementation of Erasure-Only Reed Solomon Decoders for Hybrid-ARQ Systems
-Tác giả: Cansu Sen, Soner Yesil, Ertugrul Kolagasioglu
-Ngày: 2016-03-30
-Link: https://export.arxiv.org/pdf/1603.09062v1
-Chủ đề: ARQ
-
-Abstract: This paper presents the usage of the Reed Solomon Codes as the Forward Error Correction (FEC) unit of the Hybrid Automatic Repeat Request (ARQ) methods. Parametric and flexible FPGA implementation details of such Erasure-Only RS decoders with high symbol lengths (e.g. GF(2^32)) have been presented. The design is based on the GF(2m) multiplier logic core operating at a single clock cycle, where the resource utilization and throughput are both directly proportional to the number of these cores. For a fixed implementation, the throughput inversely decreases with the number of erasures to be corrected. Implementation in Zynq7020 SoC device of an example GF(2^32)-RS Decoder capable of correcting 64-erasures with a single multiplier resulted in 1641-LUTs and 188-FFs achieving 15Mbps, whereas the design with 8 multipliers resulted in 6128-LUTs and 628-FFs achieving 100Mbps.

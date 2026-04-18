@@ -1,7 +1,0 @@
-Tiêu đề: Green communication via Type-I ARQ: Finite block-length analysis
-Tác giả: Behrooz Makki, Tommy Svensson, Michele Zorzi
-Ngày: 2014-09-11
-Link: https://export.arxiv.org/pdf/1409.3336v2
-Chủ đề: ARQ
-
-Abstract: This paper studies the effect of optimal power allocation on the performance of communication systems utilizing automatic repeat request (ARQ). Considering Type-I ARQ, the problem is cast as the minimization of the outage probability subject to an average power constraint. The analysis is based on some recent results on the achievable rates of finite-length codes and we investigate the effect of codewords length on the performance of ARQ-based systems. We show that the performance of ARQ protocols is (almost) insensitive to the length of the codewords, for codewords of length $\ge 50$ channel uses. Also, optimal power allocation improves the power efficiency of the ARQ-based systems substantially. For instance, consider a Rayleigh fading channel, codewords of rate 1 nats-per-channel-use and outage probability $10^{-3}.$ Then, with a maximum of 2 and 3 transmissions, the implementation of power-adaptive ARQ reduces the average power, compared to the open-loop communication setup, by 17 and 23 dB, respectively, a result which is (almost) independent of the codewords length. Also, optimal power allocation increases the diversity gain of the ARQ protocols considerably.

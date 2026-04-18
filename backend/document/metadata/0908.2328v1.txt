@@ -1,7 +1,0 @@
-Tiêu đề: ARQ Secrecy: From Theory to Practice
-Tác giả: Yara Omar, Moustafa Youssef, Hesham El Gamal
-Ngày: 2009-08-17
-Link: https://export.arxiv.org/pdf/0908.2328v1
-Chủ đề: ARQ
-
-Abstract: Inspired by our earlier work on Automatic Repeat reQuest (ARQ) secrecy, we propose a simple, yet efficient, security overlay protocol to existing 802.11 networks. Our work targets networks secured by the Wired Equivalent Privacy (WEP) protocol because of its widespread use and vulnerability to a multitude of security threats. By exploiting the existing ARQ protocol in the 802.11 standard, our proposed opportunistic secrecy scheme is shown to defend against all known passive WEP attacks. Moreover, our implementation on the madwifi-ng driver is used to establish the achievability of a vanishing secrecy outage probability in several realistic scenarios.

@@ -1,7 +1,0 @@
-Tiêu đề: PolarQuant: Optimal Gaussian Weight Quantization via Hadamard Rotation for LLM Compression
-Tác giả: Caio Vicentino
-Ngày: 2026-03-30
-Link: https://export.arxiv.org/pdf/2603.29078v1
-Chủ đề: TurboQuant
-
-Abstract: We present PolarQuant, a post-training weight quantization method for large language models (LLMs) that exploits the distributional structure of neural network weights to achieve near-lossless compression. PolarQuant operates in three stages: (1) block-wise normalization to the unit hypersphere, (2) Walsh-Hadamard rotation to transform coordinates into approximately Gaussian random variables, and (3) quantization with centroids matched to the Gaussian distribution. Our ablation reveals that Hadamard rotation alone accounts for 98% of the quality improvement, reducing Qwen3.5-9B perplexity from 6.90 (absmax Q5) to 6.40 (Delta = +0.03 from FP16), making it practically lossless without any calibration data. Furthermore, PolarQuant functions as an effective preprocessing step for downstream INT4 quantizers: PolarQuant Q5 dequantized and re-quantized by torchao INT4 achieves perplexity 6.56 versus 6.68 for direct absmax INT4, while maintaining 43.1 tok/s throughput at 6.5 GB VRAM. Code and models are publicly available.

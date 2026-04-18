@@ -1,7 +1,0 @@
-Tiêu đề: Average Age of Information with Hybrid ARQ under a Resource Constraint
-Tác giả: Elif Tugce Ceran, Deniz Gunduz, Andras Gyorgy
-Ngày: 2017-10-01
-Link: https://export.arxiv.org/pdf/1710.04971v3
-Chủ đề: ARQ
-
-Abstract: Scheduling of the transmission of status updates over an error-prone communication channel is studied in order to minimize the long-term average age of information (AoI) at the destination, under an average resource constraint at the source node, which limits the average number of transmissions. After each transmission, the source receives an instantaneous ACK/NACK feedback, and decides on the next update, without a priori knowledge on the success of the future transmissions. The optimal scheduling policy is studied under different feedback mechanisms; in particular, standard automatic repeat request (ARQ) and hybrid ARQ (HARQ) protocols are considered. Average-cost reinforcement learning algorithms are proposed when the error probabilities for the HARQ system are unknown.

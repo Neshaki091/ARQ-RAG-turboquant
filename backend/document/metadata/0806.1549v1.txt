@@ -1,7 +1,0 @@
-Tiêu đề: Bits through ARQs
-Tác giả: Krishnan Eswaran, Michael Gastpar, Kannan Ramchandran
-Ngày: 2008-06-09
-Link: https://export.arxiv.org/pdf/0806.1549v1
-Chủ đề: ARQ
-
-Abstract: A fundamental problem in dynamic frequency reuse is that the cognitive radio is ignorant of the amount of interference it inflicts on the primary license holder. A model for such a situation is proposed and analyzed. The primary sends packets across an erasure channel and employs simple ACK/NAK feedback (ARQs) to retransmit erased packets. Furthermore, its erasure probabilities are influenced by the cognitive radio's activity. While the cognitive radio does not know these interference characteristics, it can eavesdrop on the primary's ARQs. The model leads to strategies in which the cognitive radio adaptively adjusts its input based on the primary's ARQs thereby guaranteeing the primary exceeds a target packet rate. A relatively simple strategy whereby the cognitive radio transmits only when the primary's empirical packet rate exceeds a threshold is shown to have interesting universal properties in the sense that for unknown time-varying interference characteristics, the primary is guaranteed to meet its target rate. Furthermore, a more intricate version of this strategy is shown to be capacity-achieving for the cognitive radio when the interference characteristics are time-invariant.

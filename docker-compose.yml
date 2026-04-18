@@ -68,11 +68,12 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: arq_rag_tunnel
     restart: always
-    command: tunnel --no-autoupdate run
-    environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes:
+      - ./.cloudflared:/etc/cloudflared
     depends_on:
       - backend
+      - frontend
 
 
 volumes:

@@ -1,7 +1,0 @@
-Tiêu đề: On the Performance of NOMA with Hybrid ARQ
-Tác giả: Donghong Cai, Zhiguo Ding, Pingzhi Fan, Zheng Yang
-Ngày: 2018-07-10
-Link: https://export.arxiv.org/pdf/1807.03745v1
-Chủ đề: ARQ
-
-Abstract: In this paper, we investigate the outage performance of hybrid automatic repeat request with chase combining (HARQ-CC) assisted downlink non-orthogonal multiple access (NOMA) systems. A closed-form expression of the individual outage probability and the diversity gain are obtained firstly. Based on the developed analytical outage probability, a tradeoff between the minimum number of retransmissions and the transmit power allocation coefficient is then provided for a given target rate. The provided simulation results demonstrate the accuracy of the developed analytical results. Moreover, it is shown that NOMA combined with the HARQ-CC can achieve a significant advantage when only average channel state information is known at the transmitter. Particularly, the performance of the user with less transmit power in NOMA systems can be efficiently improved by utilizing HARQ-CC.

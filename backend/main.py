@@ -13,6 +13,7 @@ from benchmark import BenchmarkManager
 from export_excel import export_to_excel
 from shared.supabase_client import SupabaseManager
 from shared.vector_store import VectorStoreManager
+import httpx
 
 from collections import deque
 ui_log_queue = deque(maxlen=100)
@@ -411,6 +412,74 @@ async def run_crawl(background_tasks: BackgroundTasks):
 
     background_tasks.add_task(process)
     return {"message": "Bắt đầu cào dữ liệu arXiv (Vui lòng theo dõi log)..."}
+
+@app.post("/run-crawl-gh")
+async def run_crawl_gh():
+    """Kích hoạt Crawler trên GitHub Actions."""
+    token = os.getenv("GITHUB_TOKEN")
+    owner = os.getenv("GITHUB_OWNER")
+    repo = os.getenv("GITHUB_REPO")
+    
+    if not token or not owner or not repo:
+        raise HTTPException(status_code=500, detail="Thiếu cấu hình GitHub (Token/Owner/Repo)")
+
+    # Reset stop signal trước khi chạy
+    sm = SupabaseManager()
+    sm.set_stop_signal(False)
+
+    url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/crawl.yml/dispatches"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28"
+    }
+    data = {"ref": "main"} # Hoặc nhánh mặc định của bạn
+
+    async with httpx.AsyncClient() as client:
+        res = await client.post(url, headers=headers, json=data)
+        if res.status_code != 204:
+            logger.error(f"GitHub API Error: {res.text}")
+            raise HTTPException(status_code=res.status_code, detail=f"Không thể kích hoạt GitHub Action: {res.text}")
+    
+    state["status"] = "CRAWLING (GH)"
+    logger.info("🚀 Đã kích hoạt Crawler trên GitHub Actions thành công!")
+    return {"message": "Đã kích hoạt Crawler trên GitHub Actions."}
+
+@app.post("/stop-crawl-gh")
+async def stop_crawl_gh():
+    """Dừng Crawler trên GitHub Actions."""
+    token = os.getenv("GITHUB_TOKEN")
+    owner = os.getenv("GITHUB_OWNER")
+    repo = os.getenv("GITHUB_REPO")
+    
+    # 1. Soft Stop: Đặt cờ stop trong Supabase
+    sm = SupabaseManager()
+    sm.set_stop_signal(True)
+    logger.info("⚠️ Đã gửi tín hiệu Soft Stop qua Supabase.")
+
+    # 2. Hard Stop: Hủy workflow run trên GitHub (nếu có)
+    if token and owner and repo:
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28"
+        }
+        async with httpx.AsyncClient() as client:
+            # Lấy danh sách các run đang chạy
+            runs_url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs?status=in_progress"
+            res = await client.get(runs_url, headers=headers)
+            if res.status_code == 200:
+                runs = res.json().get("workflow_runs", [])
+                for run in runs:
+                    if "crawl" in run.get("name", "").lower() or "crawl.yml" in run.get("path", ""):
+                        cancel_url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs/{run['id']}/cancel"
+                        await client.post(cancel_url, headers=headers)
+                        logger.warning(f"🛑 Đã gửi lệnh Cancel tới GitHub Run ID: {run['id']}")
+            else:
+                logger.error(f"Lỗi khi tìm workflow run: {res.text}")
+
+    state["status"] = "IDLE"
+    return {"message": "Đã gửi yêu cầu dừng Crawler (GitHub & Database)."}
 
 @app.post("/stop-crawl")
 async def stop_crawl():

@@ -1,7 +1,0 @@
-Tiêu đề: Variable-rate Retransmissions for Incremental Redundancy Hybrid ARQ
-Tác giả: Leszek Szczecinski, Ciro Correa, Luciano Ahumada
-Ngày: 2012-07-01
-Link: https://export.arxiv.org/pdf/1207.0229v1
-Chủ đề: ARQ
-
-Abstract: The throughput achievable in truncated Hybrid ARQ protocol (HARQ) using incremental redundancy (IR) in analyzed when transmitting over a block-fading channel whose state is unknown at the transmitter. We allow the transmission lengths to vary, optimize them efficiently via dynamic programming, and show that such a variable-rate HARQ-IR provides gains with respect to a fixed-rate transmission in terms of increased throughput and decreased average number of transmissions, reducing at the same time the outage probability.

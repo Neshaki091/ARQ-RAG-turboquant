@@ -1,7 +1,0 @@
-Tiêu đề: Power Allocation for Type-I ARQ Two-Hop Cooperative Networks for Ultra-Reliable Communication
-Tác giả: Endrit Dosti, Themistoklis Charalambous, Risto Wichman
-Ngày: 2019-04-14
-Link: https://export.arxiv.org/pdf/1904.06708v1
-Chủ đề: ARQ
-
-Abstract: We analyze the performance of amplify-and-forward (AF) automatic repeat request (ARQ) for a two-hop cooperative system with reliability constrains. For this setup, we first derive the closed-form outage probability expression. Next, we present a power allocation scheme that allows us to achieve a target outage probability, while minimizing the outage-weighted average power expenditure for asymmetric power allocation between the source and relay. This is cast as an optimization problem, and the optimal power allocation (OPA) is obtained in closed form by invoking the Karush-Kuhn-Tucker (KKT) conditions. We evaluate numerically the OPA strategy between different AF-ARQ transmission rounds and we show that the proposed scheme provides large power gains with respect to the optimized point-to-point ARQ scheme, as well as with respect to the equal power allocation (EPA) strategy.

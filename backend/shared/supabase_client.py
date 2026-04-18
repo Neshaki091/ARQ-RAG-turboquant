@@ -18,8 +18,56 @@ class SupabaseManager:
 
     def list_files(self, bucket: str = "papers"):
         if not self.supabase: return []
-        res = self.supabase.storage.from_(bucket).list()
-        return [f['name'] for f in res if f['name'] != '.emptyFolderPlaceholder']
+        try:
+            all_files = []
+            offset = 0
+            limit = 100
+            while True:
+                res = self.supabase.storage.from_(bucket).list(options={
+                    'limit': limit,
+                    'offset': offset,
+                    'sortBy': {'column': 'name', 'order': 'asc'}
+                })
+                if not res:
+                    break
+                
+                names = [f['name'] for f in res if f['name'] != '.emptyFolderPlaceholder']
+                all_files.extend(names)
+                
+                if len(res) < limit:
+                    break
+                offset += limit
+            
+            return all_files
+        except Exception as e:
+            logger.error(f"Lỗi khi lấy danh sách file từ storage: {e}")
+            return []
+
+    # --- System Control (For GitHub Actions Crawler) ---
+
+    def set_stop_signal(self, should_stop: bool = True):
+        """Đặt tín hiệu dừng cho crawler."""
+        if not self.supabase: return
+        try:
+            self.supabase.table("system_config").upsert({
+                "key": "crawler_stop_signal",
+                "value": str(should_stop).lower()
+            }).execute()
+            logger.info(f"🛑 Tín hiệu dừng Crawler đã được đặt thành: {should_stop}")
+        except Exception as e:
+            logger.error(f"Lỗi khi đặt stop signal: {e} (Có thể bạn chưa tạo bảng system_config)")
+
+    def check_stop_signal(self) -> bool:
+        """Kiểm tra tín hiệu dừng."""
+        if not self.supabase: return False
+        try:
+            res = self.supabase.table("system_config").select("value").eq("key", "crawler_stop_signal").execute()
+            if res.data and len(res.data) > 0:
+                return res.data[0]["value"] == "true"
+        except Exception as e:
+            # Nếu lỗi (như thiếu bảng), mặc định không dừng
+            pass
+        return False
 
     # --- Papers Management ---
 

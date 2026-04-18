@@ -1,7 +1,0 @@
-Tiêu đề: A Diversity-Multiplexing-Delay Tradeoff of ARQ Protocols in The Z-interference Channel
-Tác giả: Mohamed S. Nafea, D. Hamza, Karim G. Seddik, Mohammed Nafie, Hesham El Gamal
-Ngày: 2012-02-08
-Link: https://export.arxiv.org/pdf/1202.1740v2
-Chủ đề: ARQ
-
-Abstract: In this work, we analyze the fundamental performance tradeoff of the single-antenna Automatic Retransmission reQuest (ARQ) Z-interference channel (ZIC). Specifically, we characterize the achievable three-dimensional tradeoff between diversity (reliability), multiplexing (throughput), and delay (maximum number of retransmissions) of two ARQ protocols: A non-cooperative protocol and a cooperative one. Considering no cooperation exists, we study the achievable tradeoff of the fixed-power split Han-Kobayashi (HK) approach. Interestingly, we demonstrate that if the second user transmits the common part only of its message in the event of its successful decoding and a decoding failure at the first user, communication is improved over that achieved by keeping or stopping the transmission of both the common and private messages. We obtain closed-form expressions for the achievable tradeoff under the HK splitting. Under cooperation, two special cases of the HK are considered for static and dynamic decoders. The difference between the two decoders lies in the ability of the latter to dynamically choose which HK special-case decoding to apply. Cooperation is shown to dramatically increase the achievable first user diversity.

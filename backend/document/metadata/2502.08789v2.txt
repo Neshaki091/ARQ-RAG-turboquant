@@ -1,7 +1,0 @@
-Tiêu đề: Delay Analysis of 5G HARQ in the Presence of Decoding and Feedback Latencies
-Tác giả: Vishnu N Moothedath, Sangwon Seo, Neda Petreska, Bernhard Kloiber, James Gross
-Ngày: 2025-02-12
-Link: https://export.arxiv.org/pdf/2502.08789v2
-Chủ đề: ARQ
-
-Abstract: The growing demand for stringent quality of service (QoS) guarantees in 5G networks requires accurate characterisation of delay performance, often measured using Delay Violation Probability (DVP) for a given target delay. Widely used retransmission schemes like Automatic Repeat reQuest (ARQ) and Hybrid ARQ (HARQ) improve QoS through effective feedback, incremental redundancy (IR), and parallel retransmission processes. However, existing works to quantify the DVP under these retransmission schemes overlook practical aspects such as decoding complexity, feedback delays, and the resulting need for multiple parallel ARQ/HARQ processes that enable packet transmissions without waiting for previous feedback, thus exploiting valuable transmission opportunities. This work proposes a comprehensive multi-server delay model for ARQ/HARQ that incorporates these aspects. Using a finite blocklength error model, we derive closed-form expressions and algorithms for accurate DVP evaluation under realistic 5G configurations aligned with 3GPP standards. Our numerical evaluations demonstrate notable improvements in DVP accuracy over the state-of-the-art, highlight the impact of parameter tuning and resource allocation, and reveal how DVP affects system throughput.

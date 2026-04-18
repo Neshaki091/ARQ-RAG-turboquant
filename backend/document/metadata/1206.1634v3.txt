@@ -1,7 +1,0 @@
-Tiêu đề: Low-complexity Optimal Scheduling over Correlated Fading Channels with ARQ Feedback
-Tác giả: Wenzhuo Ouyang, Atilla Eryilmaz, Ness B. Shroff
-Ngày: 2012-06-07
-Link: https://export.arxiv.org/pdf/1206.1634v3
-Chủ đề: ARQ
-
-Abstract: We investigate the downlink scheduling problem under Markovian ON/OFF fading channels, where the instantaneous channel state information is not directly accessible, but is revealed via ARQ-type feedback. The scheduler can exploit the temporal correlation/channel memory inherent in the Markovian channels to improve network performance. However, designing low-complexity and throughput-optimal algorithms under temporal correlation is a challenging problem. In this paper, we find that under an average number of transmissions constraint, a low-complexity index policy is throughput-optimal. The policy uses Whittle's index value, which was previously used to capture opportunistic scheduling under temporally correlated channels. Our results build on the interesting finding that, under the intricate queue length and channel memory evolutions, the importance of scheduling a user is captured by a simple multiplication of its queue length and Whittle's index value. The proposed queue-based index policy has provably low complexity. Numerical results show that significant throughput gains can be realized by exploiting the channel memory using the proposed low-complexity policy.

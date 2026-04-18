@@ -1,7 +1,0 @@
-Tiêu đề: Network Coding-Based Cooperative ARQ Scheme
-Tác giả: Angelos Antonopoulos, Christos Verikoukis
-Ngày: 2012-01-23
-Link: https://export.arxiv.org/pdf/1201.4650v1
-Chủ đề: ARQ
-
-Abstract: In this paper we introduce a novel Automatic Repeat reQuest (ARQ) scheme for cooperative wireless networks. Our scheme adopts network coding techniques in order to enhance the total bandwidth of the network by minimizing the total number of transmissions. The performance of the proposed approach is evaluated by means of computer simulations and compared to other cooperative schemes, while an analytical solution is provided to validate the results.

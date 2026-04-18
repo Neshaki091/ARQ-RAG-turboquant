@@ -1,7 +1,0 @@
-Tiêu đề: Optimal Spectrum Sharing with ARQ based Legacy Users via Chain Decoding
-Tác giả: Nicolo Michelusi
-Ngày: 2018-01-24
-Link: https://export.arxiv.org/pdf/1801.07877v2
-Chủ đề: ARQ
-
-Abstract: This paper investigates the design of access policies in spectrum sharing networks by exploiting the retransmission protocol of legacy primary users (PUs) to improve the spectral efficiency via opportunistic retransmissions at secondary users (SUs) and chain decoding. The optimal policy maximizing the SU throughput under an interference constraint to the PU and its performance are found in closed form. It is shown that the optimal policy randomizes among three modes: Idle, the SU remains idle over the retransmission window of the PU, to avoid causing interference; Interference cancellation, the SU transmits only after decoding the PU packet, to improve its own throughput via interference cancellation; Always transmit, the SU transmits over the retransmission window of the PU to maximize the future potential of interference cancellation via chain decoding. This structure is exploited to design a stochastic optimization algorithm to facilitate learning and adaptation when the model parameters are unknown or vary over time, based on ARQ feedback from the PU and CSI measurements at the SU receiver. It is shown numerically that, for a 10% interference constraint, the optimal access policy yields 15% improvement over a state-of-the-art scheme without SU retransmissions, and up to 2x gain over a scheme using a non-adaptive access policy instead of the optimal one.

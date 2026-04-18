@@ -1,7 +1,0 @@
-Tiêu đề: Rich-ARQ: From 1-bit Acknowledgment to Rich Neural Coded Feedback
-Tác giả: Enhao Chen, Yulin Shao
-Ngày: 2026-02-08
-Link: https://export.arxiv.org/pdf/2602.07886v1
-Chủ đề: ARQ
-
-Abstract: This paper reimagines the foundational feedback mechanism in wireless communication, transforming the prevailing 1-bit binary ACK/NACK with a high-dimensional, information-rich vector to transform passive acknowledgment into an active collaboration. We present Rich-ARQ, a paradigm that introduces neural-coded feedback for collaborative physical-layer channel coding between transmitter and receiver. To realize this vision in practice, we develop a novel asynchronous feedback code that eliminates stalling from feedback delays, adapts dynamically to channel fluctuations, and features a lightweight encoder suitable for on-device deployment. We materialize this concept into the first full-stack, standard-compliant software-defined radio prototype, which decouples AI inference from strict radio timing. Comprehensive over-the-air experiments demonstrate that Rich-ARQ achieves significant SNR gains over conventional 1-bit hybrid ARQ and remarkable latency reduction over prior learning-based feedback codes, moving the promise of intelligent feedback from theory to a practical, high-performance reality for next-generation networks.

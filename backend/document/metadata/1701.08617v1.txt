@@ -1,7 +1,0 @@
-Tiêu đề: Ultra Reliable Communication via Optimum Power Allocation for Type-I ARQ in Finite Block-Length
-Tác giả: Endrit Dosti, Uditha Lakmal Wijewardhana, Hirley Alves, Matti Latva-aho
-Ngày: 2017-01-30
-Link: https://export.arxiv.org/pdf/1701.08617v1
-Chủ đề: ARQ
-
-Abstract: We analyze the performance of the type-I automatic repeat request (ARQ) protocol with ultra-reliability constraints. First, we show that achieving a very low packet outage probability by using an open loop setup is a difficult task. Thus, we introduce the ARQ protocol as a solution for achieving the required low outage probabilities for ultra reliable communication. For this protocol, we present an optimal power allocation scheme that would allow us to reach any outage probability target in the finite block-length regime. We formulate the power allocation problem as minimization of the average transmitted power under a given outage probability and maximum transmit power constraint. By utilizing the Karush-Kuhn-Tucker (KKT) conditions, we solve the optimal power allocation problem and provide a closed form solution. Next, we analyze the effect of implementing the ARQ protocol on the throughput. We show that by using the proposed power allocation scheme we can minimize the loss of throughput that is caused from the retransmissions. Furthermore, we analyze the effect of the feedback delay length in our scheme.
