@@ -156,10 +156,10 @@ export default function Dashboard() {
         // Luôn cập nhật lịch sử tài nguyên nếu có dữ liệu RAM từ backend
         if (res.data.ram_usage) {
           setMetricsHistory(prev => [
-            ...prev.slice(-19),
+            ...prev,
             {
               time: new Date().toLocaleTimeString(),
-              ram: res.data.sys_ram_usage || res.data.ram_usage, // Dùng RAM hệ thống nếu có
+              ram: res.data.sys_ram_usage || res.data.ram_usage,
               latency: res.data.last_latency || 0
             }
           ]);
@@ -215,26 +215,28 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a0a0c] text-slate-200 p-8 font-sans selection:bg-indigo-500/30">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 p-8 font-sans selection:bg-blue-500/30">
       {/* Background Glow */}
       <div className="fixed top-0 left-0 w-full h-full overflow-hidden -z-10">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/10 blur-[120px] rounded-full" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-purple-500/10 blur-[120px] rounded-full" />
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-500/5 blur-[120px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-teal-500/5 blur-[120px] rounded-full" />
       </div>
 
-      <header className="max-w-7xl mx-auto mb-12 flex justify-between items-end">
-        <div>
-          <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 mb-2">
-            ARQ-RAG Research Dashboard
-          </h1>
-          <p className="text-slate-400 flex items-center gap-2">
-            <Layers size={18} className="text-indigo-400" />
-            Empirical Benchmarking of Vector Quantization Models
-          </p>
+      <header className="max-w-7xl mx-auto mb-12 flex justify-between items-center">
+        <div className="flex items-center gap-4">
+          <img src="/logo.png" alt="TurboQuant Logo" className="w-12 h-12 object-contain" />
+          <div>
+            <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-slate-800 mb-1">
+              TurboQuant Dashboard
+            </h1>
+            <p className="text-slate-500 flex items-center gap-2 text-sm font-medium">
+              Adaptive Retrieval-Augmented Generation Research Platform
+            </p>
+          </div>
         </div>
         <div className="flex gap-4">
-          <div className={`px-4 py-2 rounded-full border border-slate-800 bg-slate-900/50 flex items-center gap-2 text-sm`}>
-            <div className={`w-2 h-2 rounded-full ${["IDLE", "COMPLETED"].includes(status.status) ? "bg-green-500" : "bg-yellow-500 animate-pulse"}`} />
+          <div className={`px-4 py-2 rounded-xl border border-slate-200 bg-white shadow-sm flex items-center gap-2 text-sm font-semibold text-slate-600`}>
+            <div className={`w-2 h-2 rounded-full ${["IDLE", "COMPLETED"].includes(status.status) ? "bg-green-500" : "bg-blue-500 animate-pulse"}`} />
             System {status.status}
           </div>
         </div>
@@ -244,30 +246,30 @@ export default function Dashboard() {
 
         {/* Control Panel */}
         <section className="col-span-12 lg:col-span-4 space-y-6">
-          <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl">
-            <h3 className="text-lg font-semibold mb-6 flex items-center gap-2">
-              <Activity size={20} className="text-indigo-400" />
+          <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+            <h3 className="text-lg font-bold mb-6 flex items-center gap-2 text-slate-800">
+              <Activity size={20} className="text-blue-600" />
               Pipeline Control
             </h3>
 
             <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-slate-800/30 border border-slate-700/50">
-                <label className="text-xs uppercase tracking-wider text-slate-500 block mb-3">Auto Embedding Config</label>
+              <div className="p-4 rounded-xl bg-slate-50 border border-slate-100">
+                <label className="text-xs uppercase tracking-wider text-slate-400 block mb-3 font-semibold">Auto Embedding Config</label>
                 <div className="flex gap-3 items-center">
                   <input
                     type="number"
                     value={numFiles}
                     onChange={(e) => setNumFiles(parseInt(e.target.value))}
-                    className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 w-20 text-center focus:ring-1 ring-indigo-500 outline-none"
+                    className="bg-white border border-slate-200 rounded-lg px-3 py-2 w-20 text-center focus:ring-1 ring-blue-500 outline-none text-slate-800 font-bold"
                   />
-                  <span className="text-slate-400 text-sm">PDF Files</span>
+                  <span className="text-slate-500 text-sm">PDF Files</span>
                 </div>
               </div>
 
               <button
                 onClick={() => runAction("run-auto-pipeline", { num_files: numFiles })}
                 disabled={!["IDLE", "COMPLETED"].includes(status.status)}
-                className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 transition-all rounded-lg py-3 flex items-center justify-center gap-2 font-semibold border border-indigo-500/30 shadow-lg shadow-indigo-500/10"
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white disabled:opacity-50 transition-all rounded-lg py-3 flex items-center justify-center gap-2 font-bold shadow-md shadow-blue-500/20"
               >
                 <Activity size={18} /> Auto Embedding
               </button>
@@ -276,7 +278,7 @@ export default function Dashboard() {
                 <select
                   value={benchmarkBatchSize}
                   onChange={(e) => setBenchmarkBatchSize(parseInt(e.target.value))}
-                  className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-4 text-sm font-medium focus:ring-1 ring-indigo-500 outline-none w-24"
+                  className="bg-white border border-slate-200 rounded-lg px-3 py-4 text-sm font-bold focus:ring-1 ring-blue-500 outline-none w-24 text-slate-800"
                 >
                   <option value={20}>20 Q</option>
                   <option value={30}>30 Q</option>
@@ -285,7 +287,7 @@ export default function Dashboard() {
                 <button
                   onClick={() => runAction("run-benchmark", { batch_size: benchmarkBatchSize })}
                   disabled={!["IDLE", "COMPLETED"].includes(status.status)}
-                  className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 transition-colors rounded-lg py-4 flex items-center justify-center gap-2 font-bold text-lg border border-slate-700 shadow-xl"
+                  className="flex-1 bg-slate-50 hover:bg-slate-100 text-blue-700 disabled:opacity-50 transition-colors rounded-lg py-4 flex items-center justify-center gap-2 font-bold text-lg border border-slate-200 shadow-sm"
                 >
                   <Play size={20} fill="currentColor" /> Research
                 </button>
@@ -307,22 +309,22 @@ export default function Dashboard() {
             )}
           </div>
 
-          <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <FileText size={20} className="text-indigo-400" />
+          <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800">
+              <FileText size={20} className="text-blue-600" />
               Dataset Files ({pdfs.length})
             </h3>
             <div className="max-h-[300px] overflow-y-auto pr-2 space-y-2 custom-scrollbar">
               {pdfs.map(file => (
-                <div key={file} className="p-3 rounded-lg bg-slate-800/20 border border-slate-700/30 text-sm text-slate-400 truncate flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
+                <div key={file} className="p-3 rounded-lg bg-slate-50 border border-slate-100 text-sm text-slate-600 truncate flex items-center gap-2 font-medium">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
                   {file}
                 </div>
               ))}
             </div>
 
-            <div className="mt-6 pt-4 border-t border-slate-800/60">
-              <label className="text-[10px] uppercase tracking-[0.2em] text-red-500/60 block mb-3 font-bold">Danger Zone</label>
+            <div className="mt-6 pt-4 border-t border-slate-100 text-center">
+              <label className="text-[10px] uppercase tracking-[0.2em] text-red-400 block mb-3 font-bold">Admin Controls</label>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => handlePurge("vector")}
@@ -344,56 +346,56 @@ export default function Dashboard() {
         {/* Monitoring & Stats */}
         <section className="col-span-12 lg:col-span-8 space-y-6">
           <div className="grid grid-cols-2 gap-6">
-            <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl">
+            <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
               <div className="justify-between items-start mb-4 flex">
-                <span className="text-slate-400 text-sm">System Progress</span>
-                {["INGESTING", "EMBEDDING", "INDEXING", "BENCHMARKING"].includes(status.status) && <Loader2 size={18} className="text-indigo-400 animate-spin" />}
+                <span className="text-slate-500 text-sm font-semibold">System Progress</span>
+                {["INGESTING", "EMBEDDING", "INDEXING", "BENCHMARKING"].includes(status.status) && <Loader2 size={18} className="text-blue-600 animate-spin" />}
               </div>
-              <div className="text-3xl font-bold text-white mb-4">{status.progress}%</div>
-              <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+              <div className="text-3xl font-bold text-slate-900 mb-4">{status.progress}%</div>
+              <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${status.progress}%` }}
-                  className="bg-gradient-to-r from-indigo-500 to-purple-500 h-full"
+                  className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full"
                 />
               </div>
             </div>
 
-            <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl">
+            <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
               <div className="flex justify-between items-start mb-4">
-                <span className="text-slate-400 text-sm">Benchmark Result</span>
-                {status.excel_url && <CheckCircle2 size={18} className="text-green-400" />}
+                <span className="text-slate-500 text-sm font-semibold">Benchmark Result</span>
+                {status.excel_url && <CheckCircle2 size={18} className="text-emerald-500" />}
               </div>
               {status.excel_url ? (
                 <a
                   href={status.excel_url}
                   target="_blank"
-                  className="inline-flex items-center gap-2 bg-green-600 hover:bg-green-500 text-white px-4 py-2 rounded-lg transition-colors font-medium mt-1"
+                  className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg transition-colors font-bold mt-1 shadow-sm"
                 >
                   <Download size={18} /> Download Excel
                 </a>
               ) : (
-                <div className="text-slate-500 italic mt-2">Báo cáo sẽ xuất hiện sau khi hoàn tất</div>
+                <div className="text-slate-400 italic mt-2 text-sm">Báo cáo sẽ xuất hiện sau khi hoàn tất</div>
               )}
             </div>
           </div>
 
-          <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl h-[500px] flex flex-col">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Activity size={20} className="text-indigo-400" />
+          <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-[500px] flex flex-col">
+            <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800">
+              <Activity size={20} className="text-blue-600" />
               Real-time Chat Demonstration
             </h3>
 
             <div className="flex gap-2 mb-4">
               <select
-                className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs outline-none"
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs outline-none text-slate-700 font-semibold"
                 value={chatConfig.model}
                 onChange={(e) => setChatConfig({ ...chatConfig, model: e.target.value })}
               >
                 <option value="groq">Groq Cloud (GPT-OSS 20B)</option>
               </select>
               <select
-                className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs outline-none"
+                className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-xs outline-none text-slate-700 font-semibold"
                 value={chatConfig.collection}
                 onChange={(e) => setChatConfig({ ...chatConfig, collection: e.target.value })}
               >
@@ -405,12 +407,12 @@ export default function Dashboard() {
               </select>
             </div>
 
-            <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2 custom-scrollbar p-4 bg-slate-50/50 rounded-xl">
               {messages.map((m, i) => (
                 <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  <div className={`max-w-[85%] p-3 rounded-2xl ${m.role === 'user' ? 'bg-indigo-600' : 'bg-slate-800/80 border border-slate-700'}`}>
+                  <div className={`max-w-[85%] p-4 rounded-2xl shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-800'}`}>
                     {m.status && (
-                      <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-[11px] text-indigo-400 font-medium italic animate-pulse">
+                      <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-blue-50 border border-blue-100 text-[11px] text-blue-600 font-bold italic animate-pulse">
                         <Loader2 size={12} className="animate-spin" />
                         {m.status}
                       </div>
@@ -420,28 +422,28 @@ export default function Dashboard() {
                         remarkPlugins={[remarkGfm, remarkMath]}
                         rehypePlugins={[rehypeKatex]}
                         components={{
-                          table: ({ node, ...props }) => <div className="overflow-x-auto my-4 border border-slate-700/50 rounded-xl"><table className="min-w-full divide-y divide-slate-700/50" {...props} /></div>,
-                          th: ({ node, ...props }) => <th className="px-4 py-3 bg-slate-800/50 text-left text-xs font-bold text-slate-300 uppercase tracking-wider" {...props} />,
-                          td: ({ node, ...props }) => <td className="px-4 py-3 text-xs border-t border-slate-700/50 text-slate-400" {...props} />,
+                          table: ({ node, ...props }) => <div className="overflow-x-auto my-4 border border-slate-200 rounded-xl"><table className="min-w-full divide-y divide-slate-200" {...props} /></div>,
+                          th: ({ node, ...props }) => <th className="px-4 py-3 bg-slate-50 text-left text-xs font-bold text-slate-600 uppercase tracking-wider" {...props} />,
+                          td: ({ node, ...props }) => <td className="px-4 py-3 text-xs border-t border-slate-200 text-slate-500" {...props} />,
                           ul: ({ node, ...props }) => <ul className="list-disc ml-6 space-y-2 my-3" {...props} />,
                           ol: ({ node, ...props }) => <ol className="list-decimal ml-6 space-y-2 my-3" {...props} />,
                           li: ({ node, ...props }) => <li className="text-sm" {...props} />,
-                          h1: ({ node, ...props }) => <h1 className="text-xl font-bold mt-6 mb-3 text-white border-b border-slate-700/50 pb-2" {...props} />,
-                          h2: ({ node, ...props }) => <h2 className="text-lg font-bold mt-5 mb-2 text-white" {...props} />,
-                          h3: ({ node, ...props }) => <h3 className="text-base font-bold mt-4 mb-2 text-indigo-400" {...props} />,
+                          h1: ({ node, ...props }) => <h1 className="text-xl font-bold mt-6 mb-3 text-slate-900 border-b border-slate-200 pb-2" {...props} />,
+                          h2: ({ node, ...props }) => <h2 className="text-lg font-bold mt-5 mb-2 text-slate-900" {...props} />,
+                          h3: ({ node, ...props }) => <h3 className="text-base font-bold mt-4 mb-2 text-blue-600" {...props} />,
                           p: ({ node, ...props }) => <p className="mb-4 last:mb-0" {...props} />,
-                          code: ({ node, ...props }) => <code className="bg-slate-900/80 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-[13px] border border-slate-700/50" {...props} />,
-                          a: ({ node, ...props }) => <a className="text-indigo-400 hover:text-indigo-300 underline underline-offset-4" {...props} />
+                          code: ({ node, ...props }) => <code className="bg-slate-100 px-1.5 py-0.5 rounded text-blue-700 font-mono text-[13px] border border-slate-200" {...props} />,
+                          a: ({ node, ...props }) => <a className="text-blue-600 hover:text-blue-700 underline underline-offset-4 font-semibold" {...props} />
                         }}
                       >
                         {m.content}
                       </ReactMarkdown>
                     </div>
                     {m.latency ? (
-                      <div className="mt-3 pt-3 border-t border-slate-700/50 space-y-2">
-                        <div className="flex justify-between text-[10px] uppercase tracking-tighter text-slate-400 font-semibold items-center">
+                      <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+                        <div className="flex justify-between text-[10px] uppercase tracking-tighter text-slate-400 font-bold items-center">
                           <span>{m.scores ? "Quality Metrics (RAGAS)" : "System Metrics"}</span>
-                          <span className="bg-slate-900/80 px-2 py-1 rounded text-indigo-300">⏳ {Math.round(m.latency * 1000)} ms</span>
+                          <span className="bg-slate-100 px-2 py-1 rounded text-blue-600">⏳ {Math.round(m.latency * 1000)} ms</span>
                         </div>
                         {m.scores && (
                           <div className="space-y-1 mt-2">
@@ -456,8 +458,8 @@ export default function Dashboard() {
               ))}
               {isTyping && (
                 <div className="flex justify-start">
-                  <div className="bg-slate-800/80 p-3 rounded-2xl border border-slate-700">
-                    <Loader2 size={16} className="animate-spin text-slate-400" />
+                  <div className="bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+                    <Loader2 size={16} className="animate-spin text-blue-500" />
                   </div>
                 </div>
               )}
@@ -469,11 +471,11 @@ export default function Dashboard() {
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 placeholder="Hỏi bất cứ điều gì về tài liệu..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 pr-12 text-sm focus:ring-1 ring-indigo-500 outline-none"
+                className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 pr-12 text-sm focus:ring-1 ring-blue-500 outline-none text-slate-800 shadow-sm"
               />
               <button
                 type="submit"
-                className="absolute right-2 top-2 p-2 bg-indigo-600 rounded-lg hover:bg-indigo-500 transition-colors"
+                className="absolute right-2 top-2 p-2 bg-blue-600 rounded-lg hover:bg-blue-700 text-white transition-colors shadow-md"
                 disabled={isTyping}
               >
                 <Play size={14} fill="currentColor" />
@@ -482,9 +484,9 @@ export default function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-slate-900/40 border border-slate-800 p-6 rounded-2xl backdrop-blur-xl h-[400px]">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Cpu size={20} className="text-indigo-400" />
+            <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm h-[400px]">
+              <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800">
+                <Cpu size={20} className="text-blue-600" />
                 Real-time Resource Monitor
               </h3>
               <div className="w-full h-[300px] min-h-[300px] relative">
@@ -493,20 +495,21 @@ export default function Dashboard() {
                   <AreaChart data={metricsHistory}>
                     <defs>
                       <linearGradient id="colorRam" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#818cf8" stopOpacity={0} />
+                        <stop offset="5%" stopColor="#2563eb" stopOpacity={0.15} />
+                        <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                     <XAxis dataKey="time" hide />
-                    <YAxis stroke="#475569" fontSize={12} />
+                    <YAxis stroke="#64748b" fontSize={12} fontWeight="bold" />
                     <Tooltip
-                      contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }}
+                      contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                     />
                     <Area
                       type="monotone"
                       dataKey="ram"
-                      stroke="#818cf8"
+                      stroke="#2563eb"
+                      strokeWidth={3}
                       fillOpacity={1}
                       fill="url(#colorRam)"
                       name="RAM (MB)"
@@ -514,7 +517,8 @@ export default function Dashboard() {
                     <Line
                       type="monotone"
                       dataKey="latency"
-                      stroke="#f472b6"
+                      stroke="#db2777"
+                      strokeWidth={2}
                       dot={false}
                       name="Latency (ms)"
                     />
@@ -524,9 +528,9 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="bg-[#0b0c10] border border-slate-800 p-6 rounded-2xl backdrop-blur-xl h-[400px] flex flex-col font-mono text-[10px] md:text-xs shadow-inner">
-              <h3 className="text-sm font-semibold mb-4 flex items-center gap-2 text-slate-400 font-sans tracking-wide">
-                <Terminal size={16} className="text-emerald-500" />
+            <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl h-[400px] flex flex-col font-mono text-[10px] md:text-xs">
+              <h3 className="text-sm font-bold mb-4 flex items-center gap-2 text-slate-600 font-sans tracking-wide">
+                <Terminal size={16} className="text-blue-600" />
                 Backend Live Logs
               </h3>
               <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar pr-2 flex flex-col-reverse">
@@ -539,19 +543,19 @@ export default function Dashboard() {
 
                   const getLevelStyle = (lvl: string) => {
                     switch (lvl?.trim()) {
-                      case "ERROR": return "text-red-400 font-bold bg-red-400/10 px-1 rounded";
-                      case "WARNING": return "text-yellow-400 font-bold bg-yellow-400/10 px-1 rounded";
-                      case "INFO": return "text-emerald-400/80";
+                      case "ERROR": return "text-red-600 font-bold bg-red-100 px-1 rounded";
+                      case "WARNING": return "text-amber-600 font-bold bg-amber-100 px-1 rounded";
+                      case "INFO": return "text-blue-600 font-semibold";
                       default: return "text-slate-500";
                     }
                   };
 
                   return (
-                    <div key={i} className="py-1 text-[11px] border-b border-slate-800/30 font-mono flex gap-2 items-start leading-relaxed">
-                      <span className="text-slate-600 shrink-0">[{time}]</span>
-                      <span className="text-indigo-400/70 shrink-0 font-semibold w-20 truncate">[{module}]</span>
+                    <div key={i} className="py-1 text-[11px] border-b border-slate-200/50 font-mono flex gap-2 items-start leading-relaxed">
+                      <span className="text-slate-400 shrink-0">[{time}]</span>
+                      <span className="text-indigo-600 shrink-0 font-bold w-20 truncate">[{module}]</span>
                       <span className={`${getLevelStyle(level)} shrink-0 w-16 text-center`}>{level}</span>
-                      <span className="text-slate-300 break-words">{message}</span>
+                      <span className="text-slate-600 break-words">{message}</span>
                     </div>
                   );
                 })}
@@ -562,19 +566,19 @@ export default function Dashboard() {
 
       </main>
 
-      <style jsx global>{`
+    <style jsx global>{`
         .custom-scrollbar::-webkit-scrollbar {
-          width: 4px;
+          width: 6px;
         }
         .custom-scrollbar::-webkit-scrollbar-track {
-          background: #1e293b00;
+          background: #f1f5f9;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: #334155;
+          background: #cbd5e1;
           border-radius: 10px;
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-          background: #475569;
+          background: #94a3b8;
         }
       `}</style>
     </div>
