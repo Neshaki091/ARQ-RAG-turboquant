@@ -43,7 +43,7 @@ logging.basicConfig(
 _TARGET_LOGGERS = [
     "RAG-RAW", "RAG-PQ", "RAG-SQ8", "RAG-Adaptive", "ARQ-RAG", 
     "SharedRAG", "VectorStore", "Ingest", "Embedding", "Benchmark", 
-    "ChatService", "Supabase", "uvicorn", "uvicorn.access", "httpx", "Crawler"
+    "ChatService", "Supabase", "uvicorn", "uvicorn.access", "httpx"
 ]
 for _logger_name in _TARGET_LOGGERS:
     logger = logging.getLogger(_logger_name)
@@ -70,7 +70,6 @@ app.add_middleware(
 )
 
 # --- Trạng thái hệ thống (Cải tiến) ---
-active_processes = {} # Lưu trữ các tiến trình subprocess đang chạy
 
 # Global State
 state = {
@@ -363,145 +362,6 @@ async def run_auto_pipeline(req: IngestRequest, background_tasks: BackgroundTask
     background_tasks.add_task(process)
     return {"message": "Bắt đầu quy trình tự động (Chunk -> Embed -> Qdrant)..."}
 
-@app.post("/run-crawl")
-async def run_crawl(background_tasks: BackgroundTasks):
-    if state["status"] not in ["IDLE", "COMPLETED"]:
-        raise HTTPException(status_code=400, detail="Hệ thống đang bận")
-    
-    state["status"] = "CRAWLING" # Custom status for UI
-    state["progress"] = 0
-    
-    def process():
-        import subprocess
-        try:
-            logger.info("🚀 Đang khởi chạy Crawler bài báo (Python Version)...")
-            # Sử dụng Popen để có thể điều khiển (dừng) từ xa
-            proc = subprocess.Popen(
-                ["python", "crawl_paper.py"],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                bufsize=1
-            )
-            
-            # Lưu tiến trình vào bộ quản lý toàn cục để có thể dừng bằng /stop-crawl
-            active_processes["crawler"] = proc
-            
-            # Đọc từng dòng log từ script con và đẩy lên logger của main
-            if proc.stdout:
-                for line in iter(proc.stdout.readline, ""):
-                    if line:
-                        logger.info(line.strip())
-            
-            proc.wait()
-            # Dọn dẹp sau khi xong
-            active_processes.pop("crawler", None)
-            
-            if proc.returncode == 0:
-                logger.info("✅ Quy trình Crawler đã hoàn thành toàn bộ!")
-            elif proc.returncode == -15 or proc.returncode == -9:
-                logger.warning("⏹️ Crawler đã bị dừng bởi người dùng.")
-            else:
-                logger.error(f"❌ Crawler kết thúc với mã lỗi: {proc.returncode}")
-                
-            state["status"] = "IDLE"
-            state["progress"] = 100
-        except Exception as e:
-            logger.error(f"❌ Lỗi hệ thống khi chạy Crawl: {e}")
-            state["status"] = "IDLE"
-
-    background_tasks.add_task(process)
-    return {"message": "Bắt đầu cào dữ liệu arXiv (Vui lòng theo dõi log)..."}
-
-@app.post("/run-crawl-gh")
-async def run_crawl_gh():
-    """Kích hoạt Crawler trên GitHub Actions."""
-    token = os.getenv("GITHUB_TOKEN")
-    owner = os.getenv("GITHUB_OWNER")
-    repo = os.getenv("GITHUB_REPO")
-    
-    if not token or not owner or not repo:
-        raise HTTPException(status_code=500, detail="Thiếu cấu hình GitHub (Token/Owner/Repo)")
-
-    # Reset stop signal trước khi chạy
-    sm = SupabaseManager()
-    sm.set_stop_signal(False)
-
-    url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/crawl.yml/dispatches"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "X-GitHub-Api-Version": "2022-11-28"
-    }
-    data = {"ref": "main"} # Hoặc nhánh mặc định của bạn
-
-    async with httpx.AsyncClient() as client:
-        res = await client.post(url, headers=headers, json=data)
-        if res.status_code != 204:
-            logger.error(f"GitHub API Error: {res.text}")
-            raise HTTPException(status_code=res.status_code, detail=f"Không thể kích hoạt GitHub Action: {res.text}")
-    
-    state["status"] = "CRAWLING (GH)"
-    logger.info("🚀 Đã kích hoạt Crawler trên GitHub Actions thành công!")
-    return {"message": "Đã kích hoạt Crawler trên GitHub Actions."}
-
-@app.post("/stop-crawl-gh")
-async def stop_crawl_gh():
-    """Dừng Crawler trên GitHub Actions."""
-    token = os.getenv("GITHUB_TOKEN")
-    owner = os.getenv("GITHUB_OWNER")
-    repo = os.getenv("GITHUB_REPO")
-    
-    # 1. Soft Stop: Đặt cờ stop trong Supabase
-    sm = SupabaseManager()
-    sm.set_stop_signal(True)
-    logger.info("⚠️ Đã gửi tín hiệu Soft Stop qua Supabase.")
-
-    # 2. Hard Stop: Hủy workflow run trên GitHub (nếu có)
-    if token and owner and repo:
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github+json",
-            "X-GitHub-Api-Version": "2022-11-28"
-        }
-        async with httpx.AsyncClient() as client:
-            # Lấy danh sách các run đang chạy
-            runs_url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs?status=in_progress"
-            res = await client.get(runs_url, headers=headers)
-            if res.status_code == 200:
-                runs = res.json().get("workflow_runs", [])
-                for run in runs:
-                    if "crawl" in run.get("name", "").lower() or "crawl.yml" in run.get("path", ""):
-                        cancel_url = f"https://api.github.com/repos/{owner}/{repo}/actions/runs/{run['id']}/cancel"
-                        await client.post(cancel_url, headers=headers)
-                        logger.warning(f"🛑 Đã gửi lệnh Cancel tới GitHub Run ID: {run['id']}")
-            else:
-                logger.error(f"Lỗi khi tìm workflow run: {res.text}")
-
-    state["status"] = "IDLE"
-    return {"message": "Đã gửi yêu cầu dừng Crawler (GitHub & Database)."}
-
-@app.post("/stop-crawl")
-async def stop_crawl():
-    """Dừng tiến trình cào dữ liệu đang chạy."""
-    if "crawler" not in active_processes:
-        return {"message": "Không có tiến trình cào nào đang chạy."}
-    
-    try:
-        proc = active_processes["crawler"]
-        # Thử dừng nhẹ nhàng (SIGTERM)
-        proc.terminate()
-        
-        # Cập nhật trạng thái Dashboard ngay lập tức
-        state["status"] = "IDLE"
-        state["progress"] = 0
-        
-        logger.warning("⚠️ Đang yêu cầu dừng Crawler...")
-        return {"message": "Đã gửi yêu cầu dừng Crawler."}
-    except Exception as e:
-        logger.error(f"Lỗi khi dừng Crawler: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.post("/run-generate-testset")
 async def run_generate_testset(background_tasks: BackgroundTasks):
     if state["status"] not in ["IDLE", "COMPLETED"]:
@@ -532,7 +392,5 @@ async def run_generate_testset(background_tasks: BackgroundTasks):
 
 if __name__ == "__main__":
     import uvicorn
-    import time # Cần time trong process()
-    # Để hiện log các endpoint khác, giữ access_log=True (mặc định)
-    # Lọc log /status được thực hiện trong startup_event()
+    import time
     uvicorn.run(app, host="0.0.0.0", port=8000, access_log=True)

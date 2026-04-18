@@ -260,25 +260,6 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="flex gap-2">
-                <button
-                  onClick={() => runAction("run-crawl-gh")}
-                  disabled={!["IDLE", "COMPLETED"].includes(status.status)}
-                  className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 transition-colors rounded-lg py-3 flex items-center justify-center gap-2 font-medium border border-slate-700"
-                >
-                  <Database size={18} /> Run Crawl (GitHub)
-                </button>
-                {!["IDLE", "COMPLETED"].includes(status.status) && (
-                  <button
-                    onClick={() => runAction("stop-crawl-gh")}
-                    className="px-4 bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-colors rounded-lg py-3 flex items-center justify-center gap-2 font-medium border border-red-500/20 shadow-lg shadow-red-500/5"
-                    title="Stop GitHub Crawler"
-                  >
-                    <Square size={16} fill="currentColor" /> Stop
-                  </button>
-                )}
-              </div>
-
               <button
                 onClick={() => runAction("run-auto-pipeline", { num_files: numFiles })}
                 disabled={!["IDLE", "COMPLETED"].includes(status.status)}
