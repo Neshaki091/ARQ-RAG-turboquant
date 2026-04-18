@@ -169,7 +169,12 @@ class CloudVectorStore:
         if not self.client.collection_exists(name):
             self.client.create_collection(
                 collection_name=name,
-                vectors_config=models.VectorParams(size=self.dimension, distance=models.Distance.COSINE),
+                vectors_config=models.VectorParams(
+                    size=self.dimension, 
+                    distance=models.Distance.COSINE,
+                    on_disk=True # Enable on-disk storage for vectors
+                ),
+                on_disk_payload=True, # Enable on-disk storage for payload
                 quantization_config=quantization,
                 hnsw_config=hnsw
             )
