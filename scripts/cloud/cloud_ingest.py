@@ -8,6 +8,7 @@ import faiss
 from supabase import create_client, Client
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
+import uuid
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(name)s | %(levelname)s | %(message)s')
@@ -185,7 +186,12 @@ class CloudVectorStore:
                 payload.update(extra_payloads[i])
             # Qdrant client expects a list. If it's already a list, use it. If numpy, convert.
             vec_to_send = vector.tolist() if hasattr(vector, "tolist") else vector
-            points.append(models.PointStruct(id=f"{name}_{chunk['chunk_id']}", vector=vec_to_send, payload=payload))
+
+            # Generate a valid UUID based on the chunk_id (deterministic)
+            # Qdrant requires IDs to be either 64-bit integers or UUID strings.
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{name}_{chunk['chunk_id']}"))
+            
+            points.append(models.PointStruct(id=point_id, vector=vec_to_send, payload=payload))
         
         self.client.upsert(collection_name=name, points=points)
 
