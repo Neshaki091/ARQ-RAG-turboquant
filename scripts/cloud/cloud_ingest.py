@@ -183,7 +183,9 @@ class CloudVectorStore:
             }
             if extra_payloads and i < len(extra_payloads):
                 payload.update(extra_payloads[i])
-            points.append(models.PointStruct(id=f"{name}_{chunk['chunk_id']}", vector=vector.tolist(), payload=payload))
+            # Qdrant client expects a list. If it's already a list, use it. If numpy, convert.
+            vec_to_send = vector.tolist() if hasattr(vector, "tolist") else vector
+            points.append(models.PointStruct(id=f"{name}_{chunk['chunk_id']}", vector=vec_to_send, payload=payload))
         
         self.client.upsert(collection_name=name, points=points)
 
@@ -291,10 +293,12 @@ def main():
             # 1. RAW
             vector_store.ensure_collection("vector_raw")
             vector_store.upsert("vector_raw", chunks, embeddings)
+            logger.info("   - RAW collection updated.")
 
             # 2. Adaptive
             vector_store.ensure_collection("vector_adaptive")
             vector_store.upsert("vector_adaptive", chunks, embeddings)
+            logger.info("   - Adaptive collection updated.")
 
             # 3. SQ8
             sq8 = ManualSQ8(d=768)
@@ -304,6 +308,7 @@ def main():
                 scalar=models.ScalarQuantizationConfig(type=models.ScalarType.INT8, always_ram=True)
             ))
             vector_store.upsert("vector_sq8", chunks, embeddings, extra_payloads=[{"codes": c.tolist()} for c in codes_sq8])
+            logger.info("   - SQ8 collection updated.")
 
             # 4. PQ
             pq = ManualPQ(d=768, m=32, nbits=8)
@@ -313,6 +318,7 @@ def main():
                 product=models.ProductQuantizationConfig(compression=models.CompressionRatio.X32, always_ram=True)
             ))
             vector_store.upsert("vector_pq", chunks, embeddings, extra_payloads=[{"codes": c.tolist()} for c in codes_pq])
+            logger.info("   - PQ collection updated.")
 
             # 5. ARQ (TurboQuant)
             tq_prod = TurboQuantProd(d=768, b=4)
@@ -338,10 +344,12 @@ def main():
                 scalar=models.ScalarQuantizationConfig(type=models.ScalarType.INT8, always_ram=True)
             ))
             vector_store.upsert("vector_arq", chunks, embeddings, extra_payloads=extra_arq)
+            logger.info("   - ARQ collection updated.")
 
             # Mark as embedded
             supabase.update_paper_status(paper_id, True)
-            logger.info(f"✅ Successfully embedded and updated status for: {paper_id}")
+            logger.info(f"✅ FINISHED: {paper_id} | Total chunks: {len(chunks)}")
+            logger.info("-" * 40)
 
         except Exception as e:
             logger.error(f"Failed to process {paper_id}: {e}")
