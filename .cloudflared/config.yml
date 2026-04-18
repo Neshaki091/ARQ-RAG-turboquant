@@ -1,0 +1,9 @@
+tunnel: 3fc99fcb-f5d6-4722-b6b3-6f980a6e2793
+credentials-file: /etc/cloudflared/tunnel.json
+
+ingress:
+  - hostname: apiarqrag.evbtranding.site
+    service: http://frontend:3000
+    originRequest:
+      noTLSVerify: true
+  - service: http_status:404
