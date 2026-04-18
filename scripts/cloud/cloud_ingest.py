@@ -130,6 +130,31 @@ class CloudSupabase:
     def get_file_content(self, bucket, filename):
         return self.client.storage.from_(bucket).download(filename)
 
+    def list_files(self, bucket: str = "papers"):
+        try:
+            all_files = []
+            offset = 0
+            limit = 100
+            while True:
+                res = self.client.storage.from_(bucket).list(options={
+                    'limit': limit,
+                    'offset': offset,
+                    'sortBy': {'column': 'name', 'order': 'asc'}
+                })
+                if not res:
+                    break
+                
+                names = [f['name'] for f in res if f['name'] != '.emptyFolderPlaceholder']
+                all_files.extend(names)
+                
+                if len(res) < limit:
+                    break
+                offset += limit
+            return all_files
+        except Exception as e:
+            logger.error(f"Error listing files in bucket: {e}")
+            return []
+
     def reset_all_paper_status(self):
         # Update is_embedded=False for ALL papers where it's True
         self.client.table("papers").update({"is_embedded": False}).neq("is_embedded", False).execute()
@@ -221,19 +246,24 @@ def main():
         logger.info("No pending papers to embed.")
         return
 
-    logger.info(f"Found {len(papers)} pending papers.")
+    logger.info("Fetching actual file list from bucket...")
+    actual_files = supabase.list_files("papers")
+    logger.info(f"Bucket contains {len(actual_files)} files.")
+
+    logger.info(f"Found {len(papers)} pending papers metadata.")
 
     for paper in papers:
         paper_id = paper['id']
-        filename = f"{paper_id}.pdf" # Heuristic mapping
-        # Try different possible filenames if id isn't exact
-        # Based on current ingest.py, it's arxiv_id + "_" + something.
-        # But we can try to guess or use the URL.
         
-        url_file = paper.get('url', '').split('/')[-1]
-        target_file = url_file if url_file else filename
+        # Resolve target_file by prefix matching paper_id
+        # Crawler saves as {arxiv_id}_{safe_title}.pdf
+        target_file = next((f for f in actual_files if f.startswith(f"{paper_id}_") or f == f"{paper_id}.pdf" or f == paper_id), None)
         
-        logger.info(f"Processing paper: {paper['title']} ({target_file})")
+        if not target_file:
+            logger.warning(f"⚠️ Could not find file for {paper_id} in Storage (Prefix match failed)")
+            continue
+
+        logger.info(f"Processing paper: {paper['title']} (File found: {target_file})")
 
         try:
             pdf_content = supabase.get_file_content("papers", target_file)
