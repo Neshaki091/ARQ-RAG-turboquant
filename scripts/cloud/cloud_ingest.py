@@ -127,7 +127,7 @@ class CloudSupabase:
     def update_paper_status(self, paper_id, status=True):
         self.client.table("papers").update({"is_embedded": status}).eq("id", paper_id).execute()
 
-    def get_pdf_content(self, bucket, filename):
+    def get_file_content(self, bucket, filename):
         return self.client.storage.from_(bucket).download(filename)
 
     def reset_all_paper_status(self):
