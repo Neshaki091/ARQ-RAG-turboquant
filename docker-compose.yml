@@ -24,20 +24,6 @@ services:
       - ./backend:/app
       - ./backend/data:/app/data
 
-  frontend:
-    build:
-      context: ./frontend
-    container_name: arq_rag_frontend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
-    command: npm run dev
-    depends_on:
-      - backend
-
   qdrant:
     image: qdrant/qdrant
     container_name: arq_rag_qdrant
@@ -73,7 +59,6 @@ services:
       - ./.cloudflared:/etc/cloudflared
     depends_on:
       - backend
-      - frontend
 
 
 volumes:

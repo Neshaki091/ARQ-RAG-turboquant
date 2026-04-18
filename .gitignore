@@ -3,6 +3,7 @@
 node_modules/
 dist/
 .DS_Store
+auto-push.js
 
 # Storage / Database
 ollama_storage/
@@ -39,4 +40,3 @@ WORK_ASSIGNMENT_LUYEN.md
 WORK_ASSIGNMENT_MANH.md
 WORK.md
 QAEXAMPLE.md
-RULE_FORAGENT.md
