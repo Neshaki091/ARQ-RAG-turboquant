@@ -1,0 +1,52 @@
+name: Cloud Ingestion Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      purge_mode:
+        description: 'Set to true to reset all paper statuses to false on Supabase'
+        required: false
+        default: 'false'
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-glx
+
+      - name: Install Python Dependencies
+        run: |
+          pip install numpy qdrant-client supabase pymupdf httpx faiss-cpu
+
+      - name: Start Ollama Service
+        run: |
+          docker run -d -v ollama_data:/root/.ollama -p 11434:11434 --name ollama ollama/ollama
+          echo "Waiting for Ollama to be ready..."
+          until curl -s http://localhost:11434 > /dev/null; do sleep 5; done
+          echo "Ollama is ready!"
+
+      - name: Pull Embedding Model
+        run: |
+          docker exec ollama ollama pull nomic-embed-text
+
+      - name: Run Cloud Ingest Script
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          QDRANT_CLOUD_URL: ${{ secrets.QDRANT_CLOUD_URL }}
+          QDRANT_CLOUD_API_KEY: ${{ secrets.QDRANT_CLOUD_API_KEY }}
+          OLLAMA_URL: http://localhost:11434
+          PURGE_MODE: ${{ github.event.inputs.purge_mode }}
+        run: |
+          python scripts/cloud/cloud_ingest.py
