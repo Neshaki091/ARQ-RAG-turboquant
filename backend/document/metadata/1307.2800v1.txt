@@ -1,0 +1,7 @@
+Tiêu đề: A Hybrid ARQ Scheme Based on Polar Codes
+Tác giả: Kai Chen, Kai Niu, Jiaru Lin
+Ngày: 2013-07-10
+Link: https://export.arxiv.org/pdf/1307.2800v1
+Chủ đề: ARQ
+
+Abstract: A hybrid automatic repeat request (HARQ) scheme based on a novel class of rate-compatible polar (\mbox{RCP}) codes are proposed. The RCP codes are constructed by performing punctures and repetitions on the conventional polar codes. Simulation results over binary-input additive white Gaussian noise channels (BAWGNCs) show that, using a low-complexity successive cancellation (SC) decoder, the proposed HARQ scheme performs as well as the existing schemes based on turbo codes and low-density parity-check (LDPC) codes. The proposed transmission scheme is only about 1.0-1.5dB away from the channel capacity with the information block length of 1024 bits.

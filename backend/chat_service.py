@@ -15,6 +15,7 @@ from shared.query_analyzer import QueryAnalyzer
 
 # LangChain Imports
 from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 # Import Model Handlers
@@ -40,12 +41,29 @@ class ChatService:
             "vector_arq": ARQRAGHandler(self)
         }
         
-    def get_llm(self, model_type: str):
-        # Mọi model_type giờ đều trỏ về Groq Cloud (Loại bỏ Local LLM)
+    def get_llm(self, model_name: str = None):
+        """Hệ thống Routing đa nền tảng cho ARQ-RAG."""
+        # Ưu tiên Gemini 3.1 Flash Lite Preview làm Generator mặc định (Tận dụng 1M Context)
+        if model_name is None or model_name.lower() in ["groq", "gemma-4-31b"]:
+            model_name = "gemini-3.1-flash-lite-preview"
+            
+        # 1. Routing tới Google Generative AI (Gemini / Gemma)
+        if "gemini" in model_name.lower() or "gemma" in model_name.lower():
+            return ChatGoogleGenerativeAI(
+                model=model_name,
+                temperature=0,
+                max_output_tokens=2048,
+                request_timeout=60
+            )
+        
+        # 2. Routing tới Groq (Llama / Qwen)
         return ChatGroq(
-            model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            model_name=model_name,
             api_key=os.getenv("GROQ_API_KEY"),
-            temperature=0
+            temperature=0,
+            max_tokens=2048,
+            max_retries=3,
+            request_timeout=60
         )
 
     def _extract_text(self, content):

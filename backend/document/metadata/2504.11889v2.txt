@@ -1,0 +1,7 @@
+Tiêu đề: Rethinking LLM-Based Recommendations: A Personalized Query-Driven Parallel Integration
+Tác giả: Donghee Han, Hwanjun Song, Mun Yong Yi
+Ngày: 2025-04-16
+Link: https://export.arxiv.org/pdf/2504.11889v2
+Chủ đề: ARQ
+
+Abstract: Recent studies have explored integrating large language models (LLMs) into recommendation systems but face several challenges, including training-induced bias and bottlenecks from serialized architecture. To effectively address these issues, we propose a Query-toRecommendation, a parallel recommendation framework that decouples LLMs from candidate pre-selection and instead enables direct retrieval over the entire item pool. Our framework connects LLMs and recommendation models in a parallel manner, allowing each component to independently utilize its strengths without interfering with the other. In this framework, LLMs are utilized to generate feature-enriched item descriptions and personalized user queries, allowing for capturing diverse preferences and enabling rich semantic matching in a zero-shot manner. To effectively combine the complementary strengths of LLM and collaborative signals, we introduce an adaptive reranking strategy. Extensive experiments demonstrate an improvement in performance up to 57%, while also improving the novelty and diversity of recommendations.

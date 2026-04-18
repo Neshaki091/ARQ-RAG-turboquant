@@ -44,8 +44,9 @@ def filter_relevant_contexts(query, contexts, top_n=3):
     # 3. Sắp xếp và lấy top_n
     scored_contexts.sort(key=lambda x: x[0], reverse=True)
     
-    # Chỉ lấy những chunk có nội dung thực sự liên quan (score > 20)
-    final_selection = [ctx for score, ctx in scored_contexts if score > 20]
+    # Chỉ lấy những chunk có nội dung thực sự liên quan (score >= 5). 
+    # Nếu không có từ khóa nào khớp, ta vẫn lấy theo top_n ban đầu để đảm bảo AI có dữ liệu.
+    final_selection = [ctx for score, ctx in scored_contexts if score >= 5]
     
     if not final_selection:
         return contexts[:top_n]

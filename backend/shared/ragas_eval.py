@@ -9,7 +9,7 @@ from ragas.metrics import (
     answer_similarity,
     answer_correctness
 )
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_ollama import OllamaEmbeddings
 from dotenv import load_dotenv
 
@@ -18,24 +18,22 @@ load_dotenv()
 class RagasEvaluator:
     def __init__(self, ollama_url=None):
         if ollama_url is None:
-            # Ưu tiên lấy từ ENV, nếu không có thì dùng mặc định là service name 'ollama'
             ollama_url = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
 
-        # Khởi tạo engine chấm điểm qua API
-        api_key = os.getenv("GROQ_API_KEY")
-        self.model_name = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+        # Khởi tạo engine chấm điểm qua Google API (Tránh lỗi TPM 12K của Groq)
+        # Sử dụng Gemma 4 31B (Mô hình Giám khảo chính)
+        self.model_name = "gemma-4-31b-it"
         
-        if not api_key:
-            print("WARNING: GROQ_API_KEY không tồn tại trong .env. Vui lòng bổ sung!")
-        
-        print(f"[RAGAS] Đang sử dụng LLM: {self.model_name}")
-        self.llm = ChatGroq(
-            model_name=self.model_name,
-            api_key=api_key,
-            temperature=0
+        print(f"[RAGAS] Đang sử dụng LLM giám khảo: {self.model_name}")
+        self.llm = ChatGoogleGenerativeAI(
+            model=self.model_name,
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+            temperature=0,
+            max_output_tokens=2048,
+            request_timeout=120 # Tăng timeout cho tác vụ chấm điểm phức tạp
         )
         
-        # Vẫn dùng Ollama local cho Embedding vì model nhẹ và nhanh
+        # Vẫn dùng Ollama local cho Embedding theo yêu cầu (Nomic Embed)
         self.embeddings = OllamaEmbeddings(
             model="nomic-embed-text", 
             base_url=ollama_url
@@ -47,9 +45,28 @@ class RagasEvaluator:
         Nếu có ground_truth, sẽ chấm đầy đủ 6 chỉ số.
         Nếu không có, chỉ chấm 2 chỉ số cơ bản (Faithfulness, Relevancy).
         """
+        # CẤU HÌNH CHO GÓI FREE (12K TPM): Giới hạn TỔNG context ở mức 28000 ký tự (~7000 tokens)
+        # Điều này để dành room cho Prompt chấm điểm và Output mà không bị lỗi 429
+        total_chars = 0
+        truncated_contexts = []
+        MAX_TOTAL_CHARS = 28000 
+        total_chars = 0
+        truncated_contexts = []
+        
+        # Lấy tối đa 5 đoạn chất lượng nhất nếu có thể, nhưng không quá 100000 ký tự
+        for ctx in context_list:
+            ctx_str = str(ctx)
+            if total_chars + len(ctx_str) > MAX_TOTAL_CHARS:
+                remaining = MAX_TOTAL_CHARS - total_chars
+                if remaining > 100:
+                    truncated_contexts.append(ctx_str[:remaining] + "...")
+                break
+            truncated_contexts.append(ctx_str)
+            total_chars += len(ctx_str)
+
         data = {
             "question": [query],
-            "contexts": [context_list],
+            "contexts": [truncated_contexts],
             "answer": [str(answer)],
         }
         

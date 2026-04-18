@@ -126,11 +126,11 @@ class BenchmarkManager:
                 batch_results.append(entry)
                 print(f"   [OK] Q_{actual_idx} | Latency: {res['latency']}s | Scores: {scores}")
                 
-                # [MỚI] Delay 90s giữa các câu hỏi để tránh Rate Limit (8k TPM)
+                # [MỚI] Delay 30s giữa các câu hỏi để tuân thủ 15 RPM của Google/Groq
                 if i < len(test_queries) - 1:
-                    print(f"   ⏳ Đang chờ 75 giây trước câu hỏi tiếp theo (TPM Safe Mode)...")
+                    print(f"   ⏳ Đang chờ 30 giây trước câu hỏi tiếp theo (RPM Safety Mode)...")
                     import asyncio
-                    await asyncio.sleep(75)
+                    await asyncio.sleep(30)
 
         # 1. Lưu file Batch riêng
         df_batch = pd.DataFrame(batch_results)

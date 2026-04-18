@@ -4,7 +4,7 @@ import asyncio
 import logging
 import random
 from dotenv import load_dotenv
-from langchain_groq import ChatGroq
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
 import sys
 
@@ -61,10 +61,10 @@ async def generate_benchmark_topic_based():
 
     logger.info(f"📊 Đã sẵn sàng dữ liệu cho {len(chunks_by_topic)} nhóm chủ đề.")
 
-    # 4. Khởi tạo LLM (Groq Llama 3.3 70B)
-    llm = ChatGroq(
-        model="llama-3.3-70b-versatile",
-        api_key=os.getenv("GROQ_API_KEY"),
+    # 4. Khởi tạo LLM (Sử dụng Gemma 4 31B để sinh câu hỏi chất lượng cao nhất)
+    llm = ChatGoogleGenerativeAI(
+        model="gemma-4-31b-it",
+        google_api_key=os.getenv("GOOGLE_API_KEY"),
         temperature=0.3
     )
 
@@ -80,9 +80,9 @@ async def generate_benchmark_topic_based():
 
     chain = prompt | llm
 
-    # 5. Vòng lặp sinh theo từng Topic
+    # 5. Vòng lặp sinh theo từng Topic (Mục tiêu ~500 câu tổng cộng)
     TOPICS = ["TurboQuant", "ARQ", "PQ", "RAG", "ML_Optimization", "LLM_Inference"]
-    TARGET_PER_TOPIC = 100
+    TARGET_PER_TOPIC = 85
 
     # Lấy thống kê hiện tại từ Supabase
     existing_queries = sm.get_benchmark_queries()
@@ -135,8 +135,8 @@ async def generate_benchmark_topic_based():
                     )
                     logger.info(f"   [{topic}] Tiến độ: {current_count + i + 1}/{TARGET_PER_TOPIC}")
                 
-                # Rate limit safety (Groq free tier has TPM limits)
-                await asyncio.sleep(2)
+                # Rate limit safety (Google 15 RPM -> Chờ 10 giây cho an toàn)
+                await asyncio.sleep(10)
 
             except Exception as e:
                 logger.error(f"❌ Lỗi khi sinh câu hỏi nhóm {topic}: {e}")

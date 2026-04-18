@@ -1,0 +1,7 @@
+Tiêu đề: A Systematic Approach to Incremental Redundancy over Erasure Channels
+Tác giả: Anoosheh Heidarzadeh, Jean-Francois Chamberland, Parimal Parag, Richard D. Wesel
+Ngày: 2018-05-08
+Link: https://export.arxiv.org/pdf/1805.03235v1
+Chủ đề: ARQ
+
+Abstract: As sensing and instrumentation play an increasingly important role in systems controlled over wired and wireless networks, the need to better understand delay-sensitive communication becomes a prime issue. Along these lines, this article studies the operation of data links that employ incremental redundancy as a practical means to protect information from the effects of unreliable channels. Specifically, this work extends a powerful methodology termed sequential differential optimization to choose near-optimal block sizes for hybrid ARQ over erasure channels. In doing so, an interesting connection between random coding and well-known constants in number theory is established. Furthermore, results show that the impact of the coding strategy adopted and the propensity of the channel to erase symbols naturally decouple when analyzing throughput. Overall, block size selection is motivated by normal approximations on the probability of decoding success at every stage of the incremental transmission process. This novel perspective, which rigorously bridges hybrid ARQ and coding, offers a pragmatic means to select code rates and blocklengths for incremental redundancy.

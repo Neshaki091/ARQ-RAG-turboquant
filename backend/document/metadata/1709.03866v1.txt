@@ -1,0 +1,7 @@
+Tiêu đề: Adaptive Modulation and Coding and Cooperative ARQ in a Cognitive Radio System
+Tác giả: J. Hwang, H. Saki, M. Shikh-Bahaei
+Ngày: 2017-09-12
+Link: https://export.arxiv.org/pdf/1709.03866v1
+Chủ đề: ARQ
+
+Abstract: In this paper, a joint cross-layer design of adaptive modulation and coding (AMC) and cooperative automatic repeat request (C-ARQ) scheme is proposed for a secondary user in a shared-spectrum environment. First, based on the statistical descriptions of the channel, closed-form expressions of the average spectral efficiency (SE) and the average packet loss rate (PLR) are presented. Then, the cross-layer scheme is designed, with the aim of maximizing the average SE while maintaining the average PLR under a prescribed level. An optimization problem is formed, and a sub-optimal solution is found: the target packet error rates (PER) for the secondary system channels are obtained and the corresponding sub-optimal AMC rate adaptation policy is derived based on the target PERs. Finally, the average SE and the average PLR performance of the proposed scheme are presented.

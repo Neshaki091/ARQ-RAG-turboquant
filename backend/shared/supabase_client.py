@@ -95,16 +95,32 @@ class SupabaseManager:
             )
 
     def clear_bucket(self, bucket: str):
-        """Xóa toàn bộ file trong bucket."""
+        """Xóa toàn bộ file trong bucket (Dùng vòng lặp để vượt giới hạn 100 file/lần của API)."""
         if not self.supabase: return
         try:
-            files = self.supabase.storage.from_(bucket).list()
-            file_names = [f['name'] for f in files if f['name'] != '.emptyFolderPlaceholder']
-            if file_names:
-                logger.info(f"Đang xóa {len(file_names)} file trong bucket {bucket}...")
+            total_deleted = 0
+            while True:
+                # Lấy danh sách 100 file (limit mặc định của Supabase là 100)
+                files = self.supabase.storage.from_(bucket).list(options={'limit': 100})
+                
+                # Lọc ra danh sách tên file hợp lệ (bỏ qua placeholder)
+                file_names = [f['name'] for f in files if f['name'] != '.emptyFolderPlaceholder']
+                
+                if not file_names:
+                    break
+                
+                logger.info(f"🗑️ Đang xóa batch {len(file_names)} file trong bucket '{bucket}'...")
                 self.supabase.storage.from_(bucket).remove(file_names)
+                total_deleted += len(file_names)
+                
+                # Nghỉ ngắn giữa các batch để tránh bị rate limit
+                import time
+                time.sleep(0.5)
+            
+            if total_deleted > 0:
+                logger.info(f"✅ Đã dọn sạch tổng cộng {total_deleted} file trong bucket '{bucket}'.")
         except Exception as e:
-            logger.error(f"Lỗi khi xóa bucket {bucket}: {e}")
+            logger.error(f"❌ Lỗi khi dọn dẹp bucket {bucket}: {e}")
 
     def get_public_url(self, bucket: str, filename: str):
         if not self.supabase:

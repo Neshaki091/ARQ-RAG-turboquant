@@ -7,9 +7,11 @@ class QueryAnalyzer:
     def __init__(self):
         self.sm = SupabaseManager()
         self.llm = ChatGroq(
-            model_name=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+            model_name="llama-3.1-8b-instant",
             api_key=os.getenv("GROQ_API_KEY"),
-            temperature=0
+            temperature=0,
+            max_retries=3,
+            request_timeout=30
         )
 
     def analyze(self, query: str) -> dict:
@@ -24,16 +26,16 @@ class QueryAnalyzer:
             print(f"Cache Hit: '{query}' -> Cấu hình: {cache_data}")
             label = cache_data
         else:
-            model_id = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-            print(f"Cache Miss: Đang phân loại '{query}' bằng {model_id}...")
+            print(f"Cache Miss: Đang phân loại '{query}' bằng llama-3.1-8b-instant...")
             label = self._classify_with_llm(query)
             self.sm.set_query_cache(query, label)
         
         # 2. Map label -> RAG Parameters
         config_map = {
-            "EASY": {"limit": 30, "top_k": 7, "desc": "Tra cứu nhanh"},
-            "NORMAL": {"limit": 60, "top_k": 15, "desc": "Giải thích chi tiết"},
-            "HARD": {"limit": 120, "top_k": 30, "desc": "Chứng minh/Tổng hợp phức tạp"}
+            "EASY": {"limit": 20, "top_k": 5, "desc": "Tra cứu nhanh"},
+            "NORMAL": {"limit": 50, "top_k": 10, "desc": "Giải thích chi tiết"},
+            "HARD": {"limit": 80, "top_k": 20, "desc": "Chứng minh/Tổng hợp phức tạp"},
+            "EXTREME": {"limit": 120, "top_k": 30, "desc": "Nghiên cứu đa tài liệu"}
         }
         
         config = config_map.get(label, config_map["NORMAL"])
@@ -48,20 +50,22 @@ class QueryAnalyzer:
         }
 
     def _classify_with_llm(self, query: str) -> str:
-        """Sử dụng GPT-OSS 20B để phân loại câu hỏi vào 3 nhãn: EASY, NORMAL, HARD."""
+        """Sử dụng Llama 3.1 8B để phân loại câu hỏi vào 4 nhãn: EASY, NORMAL, HARD, EXTREME."""
         try:
-            prompt = f"""You are a RAG Query Analyzer. Categorize the following research question into one of three levels:
+            prompt = f"""You are a RAG Query Analyzer. Categorize the following research question into one of four levels:
 - EASY: Simple definition, short lookup, or factual info.
 - NORMAL: Detailed explanation, procedure, or single-concept analysis.
 - HARD: Mathematical proof, complex comparison, or multi-paper synthesis.
+- EXTREME: Holistic review across many papers, complex architectural comparison, or deep methodology derivation.
 
 Question: {query}
-Respond with ONLY ONE WORD: EASY, NORMAL, or HARD. Do not write anything else."""
+Respond with ONLY ONE WORD: EASY, NORMAL, HARD, or EXTREME. Do not write anything else."""
             
             messages = [HumanMessage(content=prompt)]
             response = self.llm.invoke(messages)
             
             res_text = response.content.strip().upper()
+            if "EXTREME" in res_text: return "EXTREME"
             if "HARD" in res_text: return "HARD"
             if "NORMAL" in res_text: return "NORMAL"
             if "EASY" in res_text: return "EASY"

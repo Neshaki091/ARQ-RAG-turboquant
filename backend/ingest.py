@@ -50,7 +50,7 @@ class IngestionManager:
             text += page.get_text()
         return text
 
-    def chunk_text(self, text, chunk_size=800, overlap=100):
+    def chunk_text(self, text, chunk_size=400, overlap=50):
         words = text.split()
         chunks = []
         for i in range(0, len(words), chunk_size - overlap):

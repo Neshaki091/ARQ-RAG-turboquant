@@ -1,0 +1,7 @@
+Tiêu đề: Mixed Dual-Hop IRS-Assisted FSO-RF Communication System with H-ARQ Protocols
+Tác giả: Gyan Deep Verma, Aashish Mathur, Yun Ai, Michael Cheffena
+Ngày: 2021-08-20
+Link: https://export.arxiv.org/pdf/2111.09413v1
+Chủ đề: ARQ
+
+Abstract: Intelligent reflecting surface (IRS) is an emerging key technology for the fifth-generation (5G) and beyond wireless communication systems to provide more robust and reliable communication links. In this paper, we propose a mixed dual-hop free-space optical (FSO)-radio frequency (RF) communication system that serves the end user via a decode-and-forward (DF) relay employing hybrid automatic repeat request (HARQ) protocols on both hops. Novel closed-form expressions of the probability density function (PDF) and cumulative density function (CDF) of the equivalent end-to-end signal-to-noise ratio (SNR) are computed for the considered system. Utilizing the obtained statistics functions, we derive the outage probability (OP) and packet error rate (PER) of the proposed system by considering generalized detection techniques on the source-to-relay (S-R) link with H-ARQ protocol and IRS having phase error. We obtain useful insights into the system performance through the asymptotic analysis which aids to compute the diversity gain. The derived analytical results are validated using Monte Carlo simulation.

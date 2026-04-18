@@ -1,0 +1,7 @@
+Tiêu đề: Self-Stabilizing Automatic Repeat Request Algorithms for (Bounded Capacity, Omitting, Duplicating and non-FIFO) Computer Networks
+Tác giả: Shlomi Dolev, Ariel Hanemann, Elad Micahel Schiller, Shantanu Sharma
+Ngày: 2020-06-10
+Link: https://export.arxiv.org/pdf/2006.05901v1
+Chủ đề: ARQ
+
+Abstract: End-to-end communication over the network layer (or data link in overlay networks) is one of the most important communication tasks in every communication network, including legacy communication networks as well as mobile ad hoc networks, peer-to-peer networks, and mesh networks. Reliable end-to-end communications are based on Automatic Repeat reQuest (ARQ) algorithms for dealing with packet failures, such as packet drops. We study ARQ algorithms that exchange packets to deliver (high level) messages in first-in-first-out (FIFO) order without omissions or duplications. We present a self-stabilizing ARQ algorithm that can be applied to networks of bounded capacity that are prone to packet loss, duplication, and reordering. Our analysis considers Lamport's happened-before relation when demonstrating stabilization without assuming the presence of a fair scheduler. It shows that the length of the longest chain of Lamport's happened-before relation is 8 for any system run.

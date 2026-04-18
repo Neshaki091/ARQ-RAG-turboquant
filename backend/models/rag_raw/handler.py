@@ -45,25 +45,23 @@ class ModelHandler:
         top_hits = search_results[:top_k]
         raw_contexts = [hit.payload["content"] for hit in top_hits]
         
-        # [MỚI] Khử nhiễu và Tối ưu Payload
-        final_contexts = filter_relevant_contexts(query, raw_contexts, top_n=3)
+        # [MỚI] Khử nhiễu ngữ cảnh - Lấy Top theo dynamic top_k
+        final_contexts = filter_relevant_contexts(query, raw_contexts, top_n=top_k)
         
-        MAX_CONTEXT_CHARS = 24000
+        # 4. Generation (Sử dụng Gemini 3.1 Flash Lite - Hỗ trợ Long Context)
+        MAX_CONTEXT_CHARS = 120000
         context_text = "\n\n".join(final_contexts)
         
         if len(context_text) > MAX_CONTEXT_CHARS:
             logger.warning(f"  [Tối ưu] Context quá lớn ({len(context_text)} ký tự). Đang cắt tỉa...")
             context_text = context_text[:MAX_CONTEXT_CHARS] + "\n\n[...Cắt tỉa...]"
 
-        logger.info(f"  [Bước 3] Lọc ngữ cảnh: {len(raw_contexts)} -> {len(final_contexts)} chunk")
-
-        # 4. Generation
-        system_instructions = rf"""Bạn là chuyên gia RAG. Đọc <NGỮ CẢNH> bên dưới và TRẢ LỜI CÂU HỎI.
+        system_instructions = rf"""Bạn là một chuyên gia RAG. Đọc <NGỮ CẢNH> bên dưới và TRẢ LỜI CÂU HỎI một cách NGẮN GỌN, TRỰC TIẾP.
 
 QUY TẮC:
-1. TRỰC DIỆN: Không chào hỏi, không kết luận thừa.
+1. NGẮN GỌN: Chỉ trả lời ý chính, không chào hỏi, không kết luận rườm rà.
 2. LATEX: Dùng Markdown LaTeX ($...$ hoặc $$...$$) cho công thức.
-3. NGUỒN: Bắt đầu bằng [RAG-RAW].
+3. NGUỒN: Bắt đầu câu trả lời bằng [RAG-RAW].
 
 <NGỮ CẢNH>:
 {context_text}

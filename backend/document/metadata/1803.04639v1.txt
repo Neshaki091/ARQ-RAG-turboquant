@@ -1,0 +1,7 @@
+Tiêu đề: Correct Undetected Errors with List Decoding in ARQ Error-control Systems
+Tác giả: Jingzhao Wang, Yuan Luo
+Ngày: 2018-03-13
+Link: https://export.arxiv.org/pdf/1803.04639v1
+Chủ đề: ARQ
+
+Abstract: Undetected errors are important for linear codes, which are the only type of errors after hard decision and automatic-repeat-request (ARQ), but do not receive much attention on their correction. In concatenated channel coding, suboptimal source coding and joint source-channel coding, constrains among successive codewords may be utilized to improve decoding performance. In this paper, list decoding is used to correct the undetected errors. The benefit proportion of the correction is obviously improved especially on Hamming codes and Reed-Muller codes, which achieves about 40% in some cases. But this improvement is significant only after the selection of final codewords from the lists based on the constrains among the successive transmitted codewords. The selection algorithm is investigated here to complete the list decoding program in the application of Markov context model. The performance of the algorithm is analysed and a lower bound of the correctly selected probability is derived to determine the proper context length.

@@ -1,0 +1,7 @@
+Tiêu đề: Throughput-Delay-Reliability Tradeoff with ARQ in Wireless Ad Hoc Networks
+Tác giả: Rahul Vaze
+Ngày: 2010-04-26
+Link: https://export.arxiv.org/pdf/1004.4432v1
+Chủ đề: ARQ
+
+Abstract: Delay-reliability (D-R), and  throughput-delay-reliability (T-D-R) tradeoffs in an ad hoc network are derived for single hop and multi-hop transmission with automatic repeat request (ARQ) on each hop. The delay constraint is modeled by assuming that each packet is allowed at most $D$ retransmissions end-to-end, and the reliability  is defined as the probability that the packet is successfully decoded in at most $D$ retransmissions. The throughput of the ad hoc network is characterized by the transmission capacity, which is defined to be the maximum allowable density of transmitting nodes satisfying a per transmitter receiver rate, and an outage probability constraint, multiplied with the rate of transmission and the success probability. Given an end-to-end retransmission constraint of $D$, the optimal allocation of the number of retransmissions allowed at each hop  is derived that maximizes a lower bound on the transmission capacity. Optimizing over the number of hops, single hop transmission is shown to be optimal for maximizing a lower bound on the transmission capacity  in the sparse network regime.

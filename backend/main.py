@@ -90,6 +90,7 @@ class IngestRequest(BaseModel):
 
 class PurgeRequest(BaseModel):
     secret_key: str
+    target: str = "all" # "all", "vector", "pdf"
 
 class BenchmarkRequest(BaseModel):
     batch_size: int = 10
@@ -168,62 +169,80 @@ async def run_embed(background_tasks: BackgroundTasks):
 
 @app.post("/purge-data")
 async def purge_data(req: PurgeRequest):
-    # Lấy secret từ env (khớp với tệp .env của user)
     correct_secret = os.getenv("SECRET_KEY", "demo123")
     
     if req.secret_key != correct_secret:
         raise HTTPException(status_code=403, detail="Sai mã Secret Key!")
     
     try:
-        # 1. Xóa Qdrant collections
-        vm = VectorStoreManager()
-        # Đã cập nhật: delete_all_collections giờ tự động dùng list mặt định nếu không truyền
-        vm.delete_all_collections()
-        
-        # 2. Xóa các tệp data phục vụ tính toán
-        files_to_delete = [
-            "data/embeddings.npy",
-            "data/centroids.npy",
-            "data/chunks.json",
-            "data/metadata.json"
-        ]
-        
-        for f in files_to_delete:
-            if os.path.exists(f):
-                os.remove(f)
-                logger.info(f"Đã xóa tệp: {f}")
-        
-        # 3. Xóa Supabase Storage & Database (MỚI)
+        target = req.target.lower()
         sm = SupabaseManager()
-        sm.clear_bucket("papers")
-        sm.clear_bucket("benchmark-excel")
-        sm.clear_database_table("papers")
-        sm.clear_database_table("benchmark_queries")
-        
-        # 4. Xóa metadata local
-        metadata_dir = "document/metadata"
-        if os.path.exists(metadata_dir):
-            import shutil
-            shutil.rmtree(metadata_dir)
-            os.makedirs(metadata_dir)
-            logger.info("✅ Đã xóa sạch thư mục metadata địa phương.")
+        vm = VectorStoreManager()
 
-        # 5. Reset state
-        global state
-        state = {
-            "status": "IDLE",
-            "progress": 0,
-            "ingest_current": 0,
-            "ingest_total": 0,
-            "embed_current": 0,
-            "embed_total": 0,
-            "benchmark_cursor": 0,
-            "last_error": None,
-            "excel_url": None
-        }
+        # --- KHỐI XÓA VECTOR ---
+        if target in ["all", "vector"]:
+            logger.info("🗑️ Đang xóa Vector Database và các tệp tính toán...")
+            vm.delete_all_collections()
+            
+            files_to_delete = [
+                "data/embeddings.npy",
+                "data/centroids.npy",
+                "data/chunks.json",
+                "data/metadata.json"
+            ]
+            for f in files_to_delete:
+                if os.path.exists(f):
+                    os.remove(f)
+                    logger.info(f"   🗑️ Đã xóa tệp: {f}")
+            
+            # Reset phần liên quan đến benchmark và embed trong state
+            state["embed_current"] = 0
+            state["embed_total"] = 0
+            state["benchmark_cursor"] = 0
+            state["excel_url"] = None
+
+        # --- KHỐI XÓA PDF & RECORDS ---
+        if target in ["all", "pdf"]:
+            logger.info("🗑️ Đang xóa PDF Storage và Database Records...")
+            sm.clear_bucket("papers")
+            sm.clear_bucket("benchmark-excel") # Xóa luôn excel cũ vì data gốc đã mất
+            sm.clear_database_table("papers")
+            sm.clear_database_table("benchmark_queries")
+            
+            # Xóa metadata local
+            metadata_dir = "document/metadata"
+            if os.path.exists(metadata_dir):
+                import shutil
+                shutil.rmtree(metadata_dir)
+                os.makedirs(metadata_dir)
+                logger.info("   🗑️ Đã dọn sạch metadata địa phương.")
+
+            # Reset phần liên quan đến ingest
+            state["ingest_current"] = 0
+            state["ingest_total"] = 0
+            state["status"] = "IDLE"
+            state["progress"] = 0
+
+        # Nếu xóa tất cả, reset toàn bộ state
+        if target == "all":
+            state.update({
+                "status": "IDLE",
+                "progress": 0,
+                "ingest_current": 0,
+                "ingest_total": 0,
+                "embed_current": 0,
+                "embed_total": 0,
+                "benchmark_cursor": 0,
+                "last_error": None,
+                "excel_url": None,
+                "last_latency": 0
+            })
+            return {"message": "Hệ thống đã được làm sạch HOÀN TOÀN!"}
         
-        return {"message": "Hệ thống đã được làm sạch hoàn toàn (Qdrant, Local Files, và Supabase Storage)!"}
+        return {"message": f"Đã hoàn thành dọn dẹp mục tiêu: {target.upper()}"}
+
     except Exception as e:
+        logger.error(f"Purge Error: {e}")
         raise HTTPException(status_code=500, detail=f"Lỗi khi xóa dữ liệu: {str(e)}")
 
 @app.post("/run-benchmark")

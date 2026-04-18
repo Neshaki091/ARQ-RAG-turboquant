@@ -46,8 +46,8 @@ class ModelHandler:
         top_hits = search_results[:top_k]
         raw_contexts = [hit.payload["content"] for hit in top_hits]
         
-        # [MỚI] Khử nhiễu ngữ cảnh
-        final_contexts = filter_relevant_contexts(query, raw_contexts, top_n=3)
+        # [MỚI] Khử nhiễu ngữ cảnh - Lấy Top theo dynamic top_k
+        final_contexts = filter_relevant_contexts(query, raw_contexts, top_n=top_k)
         
         logger.info(f"  [Bước 3] Lọc ngữ cảnh: {len(raw_contexts)} -> {len(final_contexts)} chunk chất lượng")
         logger.info(f"  [Bước 3] Chọn top_k={top_k} chunk (Adaptive dynamic selection)")
@@ -57,20 +57,20 @@ class ModelHandler:
             logger.info(f"    #{i+1} | score={score} | file={hit.payload.get('file', 'N/A')} | "
                          f"preview: {content_preview}...")
 
-        # 4. Generation (Payload Optimization to avoid 413 error & TPM limit)
-        MAX_CONTEXT_CHARS = 24000
+        # 4. Generation (Sử dụng Gemini 3.1 Flash Lite - Hỗ trợ Long Context)
+        MAX_CONTEXT_CHARS = 120000 
         context_text = "\n\n".join(final_contexts)
         
         if len(context_text) > MAX_CONTEXT_CHARS:
             logger.warning(f"  [Tối ưu] Context quá lớn ({len(context_text)} ký tự). Đang cắt tỉa...")
             context_text = context_text[:MAX_CONTEXT_CHARS] + "\n\n[...Cắt tỉa...]"
 
-        system_instructions = rf"""Bạn là chuyên gia RAG. Đọc <NGỮ CẢNH> bên dưới và TRẢ LỜI CÂU HỎI.
+        system_instructions = rf"""Bạn là một chuyên gia RAG. Đọc <NGỮ CẢNH> bên dưới và TRẢ LỜI CÂU HỎI một cách NGẮN GỌN, TRỰC TIẾP.
 
 QUY TẮC:
-1. TRỰC DIỆN: Không chào hỏi, không kết luận thừa.
+1. NGẮN GỌN: Chỉ trả lời ý chính, không chào hỏi, không kết luận rườm rà.
 2. LATEX: Dùng Markdown LaTeX ($...$ hoặc $$...$$).
-3. NGUỒN: Bắt đầu bằng [RAG-Adaptive].
+3. NGUỒN: Bắt đầu câu trả lời bằng [RAG-Adaptive].
 
 <NGỮ CẢNH>:
 {context_text}

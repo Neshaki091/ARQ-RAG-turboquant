@@ -1,0 +1,7 @@
+Tiêu đề: Ultra Reliable Communication via Opportunistic ARQ Transmission in Cognitive Networks
+Tác giả: Mohammad Shehab, Hirley Alves, Matti Latva-aho
+Ngày: 2018-01-29
+Link: https://export.arxiv.org/pdf/1801.09485v1
+Chủ đề: ARQ
+
+Abstract: This paper presents a novel opportunistic spectrum sharing scheme that applies ARQ protocol to achieve ultra reliability in the finite blocklength regime. A primary user shares its licensed spectrum to a secondary user, where both communicate to the same base station. The base station applies ARQ with the secondary user, which possess a limited number of trials to transmit each packet. We resort to the interweave model in which the secondary user senses the primary user activity and accesses the channel with access probabilities which depend on the primary user arrival rate and the number of available trials. We characterize the secondary user access probabilities and transmit power in order to achieve target error constraints for both users. Furthermore, we analyze the primary user performance in terms of outage probability and delay. The results show that our proposed scheme outperforms the open loop and non-opportunistic scenarios in terms of secondary user transmit power saving and primary user reliability.

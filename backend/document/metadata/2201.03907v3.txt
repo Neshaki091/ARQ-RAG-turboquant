@@ -1,0 +1,7 @@
+Tiêu đề: Common Message Acknowledgments: Massive ARQ Protocols for Wireless Access
+Tác giả: Anders E. Kalør, Radosław Kotaba, Petar Popovski
+Ngày: 2022-01-11
+Link: https://export.arxiv.org/pdf/2201.03907v3
+Chủ đề: ARQ
+
+Abstract: Massive random access plays a central role in supporting the Internet of Things (IoT), where a subset of a large population of users simultaneously transmit small packets to a central base station. While there has been much research on the design of protocols for massive access in the uplink, the problem of providing message acknowledgments back to the users has been somewhat neglected. Reliable communication needs to rely on two-way communication for acknowledgement and retransmission. Nevertheless, because of the many possible subsets of active users, providing acknowledgments requires a significant amount of bits. Motivated by this, we define the problem of massive ARQ (Automatic Retransmission reQuest) protocol and introduce efficient methods for joint encoding of multiple acknowledgements in the downlink. The key idea towards reducing the number of bits used for massive acknowledgements is to allow for a small fraction of false positive acknowledgments. We analyze the implications of this approach and the impact of acknowledgment errors in scenarios with massive random access. Finally, we show that these savings can lead to a significant increase in the reliability when retransmissions are allowed since it allows the acknowledgment message to be transmitted more reliably using a much lower rate.

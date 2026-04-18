@@ -1,0 +1,7 @@
+Tiêu đề: Index ARQ Protocol for Reliable Contents Distribution over Broadcast Channels
+Tác giả: Takahiro Oshima, Tadashi Wadayama
+Ngày: 2015-03-31
+Link: https://export.arxiv.org/pdf/1503.08934v1
+Chủ đề: ARQ
+
+Abstract: In the present paper, we propose a broadcast ARQ protocol based on the concept of index coding. In the proposed scenario, a server wishes to transmit a finite sequence of packets to multiple receivers via a broadcast channel with packet erasures until all of the receivers successfully receive all of the packets. In the retransmission phase, the server produces a coded packet as a retransmitted packet based on the side-information sent from the receivers via feedback channels. A notable feature of the proposed protocol is that the decoding process at the receiver side has low decoding complexity because only a small number of addition operations are needed in order to recover an intended packet. This feature may be preferable for reducing the power consumption of receivers. The throughput performance of the proposed protocol is close to that of the ideal FEC throughput performance when the erasure probability is less than $0.1$. This implies that the proposed protocol provides almost optimal throughput performance in such a regime.

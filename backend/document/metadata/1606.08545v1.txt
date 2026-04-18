@@ -1,0 +1,7 @@
+Tiêu đề: A H-ARQ scheme for polar codes
+Tác giả: Saurabha R. Tavildar
+Ngày: 2016-06-28
+Link: https://export.arxiv.org/pdf/1606.08545v1
+Chủ đề: ARQ
+
+Abstract: We consider the problem of supporting H-ARQ with polar codes. For supporting H-ARQ, we propose to create redundancy versions based on different, but equivalent, subsets of a polar code. The equivalent subsets are created from an initial subset of a polar code using an inherent symmetry in polar code construction. A greedy construction is used to create the initial subset of a polar code. We demonstrate performance of proposed constructions via simulations for binary input AWGN channel. We demonstrate that a (4096, 1024) polar code can be divided into two disjoint (2048, 1024) subset polar codes, which when decoded individually are within 0.2 dB (at $1 \%$ BLER) of a (2048, 1024) polar code, and achieve performance of a (4096, 1024) polar code when decoded jointly.

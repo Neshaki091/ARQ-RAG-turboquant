@@ -34,7 +34,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export default function Dashboard() {
   const [status, setStatus] = useState<any>({ status: "IDLE", progress: 0 });
@@ -171,16 +171,30 @@ export default function Dashboard() {
     axios.get(`${API_BASE}/pdfs`).then(res => setPdfs(res.data.files)).catch(() => { });
   }, []);
 
-  const handlePurge = async () => {
-    const secret = prompt("VUI LÒNG NHẬP SECRET KEY ĐỂ XÓA SẠCH DỮ LIỆU:");
+  const handlePurge = async (target: string = "all") => {
+    const targetLabel = target === "vector" ? "VECTOR DATABASE & LOCAL CACHE" : 
+                       target === "pdf" ? "STORAGE PDF & DATABASE RECORDS" : "ALL DATA";
+    
+    const secret = prompt(`XÁC NHẬN XÓA [${targetLabel}]. NHẬP SECRET KEY:`);
     if (!secret) return;
 
-    if (confirm("Hành động này sẽ xóa toàn bộ Qdrant collections và các tệp nén cục bộ. Bạn có chắc chắn không?")) {
+    const confirmMsg = target === "vector" 
+      ? "Hành động này sẽ xóa toàn bộ Qdrant collections và tệp embeddings.npy. Bạn có chắc chắn không?"
+      : target === "pdf"
+      ? "Hành động này sẽ xóa toàn bộ PDF trên Storage và danh sách bài báo trong Database. Bạn có chắc chắn không?"
+      : "Hành động này sẽ xóa sạch TOÀN BỘ hệ thống. Bạn có chắc chắn không?";
+
+    if (confirm(confirmMsg)) {
       setError(null);
       try {
-        const res = await axios.post(`${API_BASE}/purge-data`, { secret_key: secret });
+        const res = await axios.post(`${API_BASE}/purge-data`, { 
+          secret_key: secret,
+          target: target 
+        });
         alert(res.data.message);
-        window.location.reload(); // Refresh để cập nhật lại trạng thái sạch
+        if (target === "all" || target === "pdf") {
+          window.location.reload();
+        }
       } catch (err: any) {
         setError(err.response?.data?.detail || "Purge failed");
       }
@@ -324,12 +338,20 @@ export default function Dashboard() {
 
             <div className="mt-6 pt-4 border-t border-slate-800/60">
               <label className="text-[10px] uppercase tracking-[0.2em] text-red-500/60 block mb-3 font-bold">Danger Zone</label>
-              <button
-                onClick={handlePurge}
-                className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-colors rounded-lg py-3 flex items-center justify-center gap-2 text-sm font-medium border border-red-500/20"
-              >
-                <Trash2 size={16} /> Purge All Data
-              </button>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => handlePurge("vector")}
+                  className="bg-orange-500/10 hover:bg-orange-500/20 text-orange-500 transition-colors rounded-lg py-3 flex items-center justify-center gap-2 text-[11px] font-medium border border-orange-500/20"
+                >
+                  <Database size={14} /> Vector DB
+                </button>
+                <button
+                  onClick={() => handlePurge("pdf")}
+                  className="bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-colors rounded-lg py-3 flex items-center justify-center gap-2 text-[11px] font-medium border border-red-500/20"
+                >
+                  <Trash2 size={14} /> PDF & Records
+                </button>
+              </div>
             </div>
           </div>
         </section>
