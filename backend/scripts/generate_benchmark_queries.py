@@ -31,12 +31,12 @@ class CloudBenchmarkGenerator:
             
         self.qdrant = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_key)
         
-        # Khởi tạo LLM (Sử dụng Gemma 4 31B để sinh câu hỏi chất lượng cao nhất)
+        # Khởi tạo LLM
+        # Lưu ý: Trên GitHub Actions, thư viện sẽ tự động lấy GOOGLE_API_KEY từ môi trường
         self.llm = ChatGoogleGenerativeAI(
             model="gemma-4-31b-it",
-            google_api_key=os.getenv("GOOGLE_API_KEY"),
             temperature=0.3,
-            n=1 # Rất quan trọng cho dòng mô hình Gemma
+            max_output_tokens=2048
         )
         
         self.prompt = ChatPromptTemplate.from_messages([
@@ -153,7 +153,7 @@ class CloudBenchmarkGenerator:
                             )
                         logger.info(f"   [{topic}] Batch {r+1}/{needed_requests} thành công.")
                     
-                    await asyncio.sleep(5) # Rate limit safety cho Gemini Flash
+                    await asyncio.sleep(7) # An toàn tuyệt đối cho giới hạn 15 RPM của Gemma 4
 
                 except Exception as e:
                     logger.error(f"❌ Lỗi vòng lặp sinh {topic}: {e}")
