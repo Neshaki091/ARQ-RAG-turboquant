@@ -31,6 +31,17 @@ class CloudBenchmarkGenerator:
             
         self.qdrant = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_key)
         
+        # Tự động tạo Index cho trường 'topic' để tránh lỗi 400 Bad Request
+        try:
+            self.qdrant.create_payload_index(
+                collection_name="vector_raw",
+                field_name="topic",
+                field_schema=models.PayloadSchemaType.KEYWORD
+            )
+            logger.info("✅ Đã đảm bảo Payload Index cho 'topic' trên Qdrant.")
+        except Exception:
+            pass # Index có thể đã tồn tại 
+        
         # Khởi tạo LLM
         # Lưu ý: Trên GitHub Actions, thư viện sẽ tự động lấy GOOGLE_API_KEY từ môi trường
         self.llm = ChatGoogleGenerativeAI(
@@ -72,6 +83,17 @@ class CloudBenchmarkGenerator:
                 with_vectors=False
             )
             
+            if not res:
+                # FALLBACK: Nếu không tìm thấy chunk theo Topic (do dữ liệu cũ chưa gắn nhãn)
+                # Ta sẽ lấy ngẫu nhiên các chunk bất kỳ để AI vẫn có dữ liệu làm việc
+                logger.warning(f"🔍 Nhóm [{topic}] chưa có dữ liệu gắn nhãn. Đang lấy dữ liệu ngẫu nhiên từ kho 28k chunks...")
+                res, _ = self.qdrant.scroll(
+                    collection_name="vector_raw",
+                    limit=limit,
+                    with_payload=True,
+                    with_vectors=False
+                )
+                
             if not res:
                 return []
                 
