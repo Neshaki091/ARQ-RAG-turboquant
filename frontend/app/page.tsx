@@ -12,7 +12,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import ReactMarkdown from "react-markdown";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = "https://apiarqrag.evbtranding.site";
 
 export default function Dashboard() {
   const [status, setStatus] = useState<any>({ status: "IDLE", progress: 0 });
