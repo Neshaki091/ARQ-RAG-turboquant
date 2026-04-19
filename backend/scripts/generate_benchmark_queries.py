@@ -60,7 +60,7 @@ class CloudBenchmarkGenerator:
         
         self.chain = self.prompt | self.llm
 
-    def get_random_chunks_from_qdrant(self, topic: str, limit: int = 100):
+    def get_random_chunks_from_qdrant(self, topic: str, limit: int = 70):
         """Lấy ngẫu nhiên các đoạn văn bản từ Qdrant."""
         try:
             query_filter = models.Filter(
@@ -146,12 +146,12 @@ class CloudBenchmarkGenerator:
                             )
                         logger.info(f"   [{topic}] Lượt {r+1}/{needed_requests} thành công. (+10 câu)")
                     
-                    # ĐIỀU CHỈNH: 15 giây chờ để bảo vệ giới hạn 250K TPM của tài khoản
-                    await asyncio.sleep(15)
+                    # ĐIỀU CHỈNH: 30 giây chờ để bảo vệ giới hạn 250K TPM (vì nạp tới 100 chunks)
+                    await asyncio.sleep(30)
 
                 except Exception as e:
                     logger.error(f"❌ Lỗi vòng lặp {topic}: {e}")
-                    await asyncio.sleep(20)
+                    await asyncio.sleep(40)
 
         logger.info("🎉 HOÀN THÀNH PIPELINE CHẤT LƯỢNG CAO!")
 
