@@ -6,7 +6,6 @@ import pickle
 from .quantization import TurboQuantProd
 from shared.vector_store import VectorStoreManager
 from langchain_core.messages import HumanMessage, SystemMessage
-from shared.context_filter import filter_relevant_contexts
 
 logger = logging.getLogger("ARQ-RAG")
 
@@ -113,10 +112,11 @@ class ModelHandler:
         
         raw_contexts = [hit.payload["content"] for hit in top_hits]
         
-        # [MỚI] Khử nhiễu ngữ cảnh - Lấy Top theo dynamic top_k
-        final_contexts = filter_relevant_contexts(query, raw_contexts, top_n=top_k)
+        # Dùng trực tiếp kết quả ADC reranking — không semantic filter thêm
+        # (filter_relevant_contexts sẽ phá thứ tự ADC đã được TurboQuant tối ưu)
+        final_contexts = raw_contexts
         
-        logger.info(f"  [Bước 3] Lọc ngữ cảnh: {len(raw_contexts)} -> {len(final_contexts)} chunk chất lượng cao")
+        logger.info(f"  [Bước 3] ADC reranked top_k={top_k} chunk (TurboQuant order preserved)")
 
         logger.info(f"  [Bước 3] Sau rerank: chọn top_k={top_k} chunk")
         for i, (hit, adc_score) in enumerate(zip(top_hits, top_scores)):
