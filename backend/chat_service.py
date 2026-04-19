@@ -14,7 +14,6 @@ from shared.query_analyzer import QueryAnalyzer
 import psutil
 
 # LangChain Imports
-from langchain_groq import ChatGroq
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
@@ -42,36 +41,23 @@ class ChatService:
         }
         
     def get_llm(self, model_name: str = None):
-        """Hệ thống Routing đa nền tảng cho ARQ-RAG."""
-        if model_name is None:
-            model_name = "gemma-4-26b-it"
+        """Routing LLM cho sinh câu trả lời (Generation).
         
-        # Đảm bảo routing cho các tên model cụ thể của người dùng
-        if "gemma-4" in model_name.lower():
-            return ChatGoogleGenerativeAI(
-                model=model_name,
-                google_api_key=os.getenv("GOOGLE_API_KEY"),
-                temperature=0,
-                max_output_tokens=2048,
-                request_timeout=60
-            )
+        Phân tách API Key theo mục đích:
+        - GOOGLE_API_KEY_2: Dành cho generation (endpoint này)
+        - GOOGLE_API_KEY  : Dành cho evaluation/scoring (benchmark.py, RAGAS)
+        """
+        # Mặc định: dùng gemini-3.1-flash-lite-preview với key 2
+        GENERATION_MODEL    = "gemini-3.1-flash-lite-preview"
+        GENERATION_API_KEY  = os.getenv("GOOGLE_API_KEY_2")
 
-        # 1. Routing tới Google Generative AI (Gemini / Gemma)
-        if "gemini" in model_name.lower() or "gemma" in model_name.lower():
-            return ChatGoogleGenerativeAI(
-                model=model_name,
-                temperature=0,
-                max_output_tokens=2048,
-                request_timeout=60
-            )
-        
-        # 2. Routing tới Groq (Llama / Qwen) - Fallback
-        return ChatGroq(
-            model_name="llama-3.1-8b-instant", # Safe default for Groq fallback
-            groq_api_key=os.getenv("GROQ_API_KEY"),
+        # Tất cả generation đều dùng Gemini flash-lite (GOOGLE_API_KEY_2)
+        # Groq chỉ dùng trong query_analyzer.py cho phân loại query, không dùng ở đây
+        return ChatGoogleGenerativeAI(
+            model=GENERATION_MODEL,
+            google_api_key=GENERATION_API_KEY,
             temperature=0,
-            max_tokens=2048,
-            max_retries=3,
+            max_output_tokens=512,
             request_timeout=60
         )
 
@@ -106,6 +92,7 @@ class ChatService:
         limit = analysis["limit"]
         top_k = analysis["top_k"]
         complexity = analysis["complexity"]
+        language = analysis["language"]   # "vi" hoặc "en"
         
         # 2. Phân tách tham số: Baseline (Brute-force) vs Research (Optimized)
         is_baseline = collection_name in ["vector_raw", "vector_pq", "vector_sq8"]
@@ -113,11 +100,11 @@ class ChatService:
         if is_baseline:
             # Đối với Baseline: Dùng toàn bộ những gì tìm được để làm Upper Bound chính xác nhất
             top_k = limit
-            logger.info(f"  [Baseline Mode] {collection_name} | complexity={complexity} | limit=top_k={limit}")
+            logger.info(f"  [Baseline Mode] {collection_name} | complexity={complexity} | lang={language} | limit=top_k={limit}")
             yield json.dumps({"type": "status", "message": f"🛡️ Chế độ: BASELINE ({complexity}) | Full Context={limit}"}) + "\n"
         else:
             # Đối với ARQ/Adaptive: Dùng cơ chế lọc tinh túy (Efficiency)
-            logger.info(f"  [Research Mode] {collection_name} | complexity={complexity} | limit={limit}, top_k={top_k}")
+            logger.info(f"  [Research Mode] {collection_name} | complexity={complexity} | lang={language} | limit={limit}, top_k={top_k}")
             yield json.dumps({"type": "status", "message": f"⚡ Chế độ: {collection_name.upper()} ({complexity}) | Search={limit}, Focus={top_k}"}) + "\n"
 
         # Delegate to the specific Model Handler
@@ -135,10 +122,10 @@ class ChatService:
             start_time = time.time()
             start_mem = self.process.memory_info().rss / (1024 * 1024) # MB
 
-            # 2. Xử lý yêu cầu qua handler
+            # 2. Xử lý yêu cầu qua handler (truyền thêm language)
             import asyncio
             try:
-                result = await asyncio.wait_for(handler.handle(query, model_name, limit, top_k), timeout=120)
+                result = await asyncio.wait_for(handler.handle(query, model_name, limit, top_k, language=language), timeout=120)
             except asyncio.TimeoutError:
                 yield json.dumps({"type": "error", "message": "⏳ Timeout: LLM không phản hồi trong 120 giây."}) + "\n"
                 return
@@ -162,6 +149,7 @@ class ChatService:
                     "total_ram_mb": round(end_mem, 2)
                 }
             }
+            # Yield final chunk — frontend và benchmark pipeline đều dùng type "final"
             yield json.dumps(final_result) + "\n"
 
         except Exception as e:

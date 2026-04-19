@@ -11,6 +11,7 @@ import time
 import numpy as np
 import httpx
 from collections import deque
+import threading
 
 from ingest import IngestionManager
 from shared.embed import EmbeddingManager
@@ -20,6 +21,24 @@ from shared.vector_store import VectorStoreManager
 # Tắt log thừa từ Google GenAI SDK
 logging.getLogger("google_genai").setLevel(logging.WARNING)
 logging.getLogger("langchain_google_genai").setLevel(logging.WARNING)
+
+# Ẩn log httpx spam (polling liên tục, không có giá trị debug)
+_SUPPRESS_PATTERNS = ("storage/v1/object/list", "rest/v1/benchmarks?select")
+class _SuppressHttpxSpam(logging.Filter):
+    def filter(self, record):
+        msg = record.getMessage()
+        return not any(p in msg for p in _SUPPRESS_PATTERNS)
+
+logging.getLogger("httpx").addFilter(_SuppressHttpxSpam())
+
+# Ẩn log uvicorn access cho các endpoint polling liên tục
+_SUPPRESS_ROUTES = ("/api/benchmark/history", "/pdfs", "/api/system/metrics")
+class _SuppressUvicornPolling(logging.Filter):
+    def filter(self, record):
+        msg = record.getMessage()
+        return not any(r in msg for r in _SUPPRESS_ROUTES)
+
+logging.getLogger("uvicorn.access").addFilter(_SuppressUvicornPolling())
 
 ui_log_queue = deque(maxlen=100)
 
@@ -53,6 +72,33 @@ for _logger_name in _TARGET_LOGGERS:
 class EndpointFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         return "/status" not in record.getMessage()
+
+class MemoryTracker:
+    def __init__(self, pid: int):
+        self.process = psutil.Process(pid)
+        self.peak_mem = 0
+        self.start_mem = self.process.memory_info().rss / (1024 * 1024)
+        self._stop_event = threading.Event()  # Dùng Event để báo hiệu dừng thread an toàn
+
+    def track(self):
+        # Chạy đến khi nhận được tín hiệu dừng từ stop_event
+        while not self._stop_event.is_set():
+            try:
+                curr = self.process.memory_info().rss / (1024 * 1024)
+                if curr > self.peak_mem:
+                    self.peak_mem = curr
+                self._stop_event.wait(timeout=0.05)  # Chờ 50ms hoặc đến khi nhận tín hiệu
+            except Exception:
+                break
+
+    def stop(self):
+        """Gửi tín hiệu cho thread giám sát biết cần dừng lại."""
+        self._stop_event.set()
+
+    @property
+    def peak_delta_mb(self) -> float:
+        """Trả về lượng RAM tăng thêm so với thời điểm bắt đầu (MB)."""
+        return max(0.0, self.peak_mem - self.start_mem)
 
 app = FastAPI(title="ARQ-RAG Benchmarking API")
 
@@ -190,18 +236,41 @@ async def run_benchmark_ui(req: BenchmarkRequest, background_tasks: BackgroundTa
             test_subset = queries[:req.batch_size]
             for i, q in enumerate(test_subset):
                 if not state["benchmark_running"]: break
-                with httpx.Client(timeout=120.0) as client:
+                
+                # Không dùng try-except ẩn ở đây để đảm bảo nếu lỗi sẽ dừng mẻ và báo cáo ngay
+                with httpx.Client(timeout=180.0) as client:
                     resp = client.post("http://localhost:8000/api/benchmark/query", 
                                      json={"query": q["question"], "collection": req.model})
-                    if resp.status_code == 200:
-                        res = resp.json()
+                    
+                    if resp.status_code != 200:
+                        raise Exception(f"Benchmark Failed: Query '{q['question'][:50]}...' trả về lỗi {resp.status_code}")
+                        
+                    res = resp.json()
+                    # Đảm bảo contexts là JSON-serializable (list of strings)
+                    contexts_val = res.get("contexts", [])
+                    if isinstance(contexts_val, list):
+                        contexts_val = json.dumps(contexts_val)
+
+                    try:
                         sm.supabase.table("benchmarks").insert({
-                            "model_name": req.model, "question": q["question"],
-                            "answer": res["answer"], "contexts": res["contexts"],
+                            "model_name": req.model,
+                            "question": q["question"],
+                            "answer": res["answer"],
+                            "contexts": contexts_val,
                             "ground_truth": q.get("ground_truth", ""),
-                            "latency_ms": res["latency_ms"], "peak_ram_mb": res["peak_ram_mb"],
+                            "latency_ms": res["latency_ms"],
+                            "base_ram_mb": res["base_ram_mb"],
+                            "peak_ram_mb": res["peak_ram_mb"],
+                            "total_ram_mb": res["total_ram_mb"],
+                            "retrieval_latency_ms": res.get("retrieval_latency_ms", 0),
+                            "rerank_latency_ms": res.get("rerank_latency_ms", 0),
                             "topic": q.get("topic", "General")
                         }).execute()
+                    except Exception as db_err:
+                        import traceback
+                        print(f"[Benchmark Insert Error] {db_err}\nFields: answer_len={len(res.get('answer',''))}, contexts_type={type(contexts_val)}")
+                        raise
+
                 state["progress"] = int(((i+1)/len(test_subset))*100)
             state["status"] = "COMPLETED"
         except Exception as e:
@@ -234,6 +303,174 @@ async def clear_benchmark_history(model: str = "all"):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class EvaluateRequest(BaseModel):
+    model_name: str          # Tên collection cần chấm: "vector_raw", "vector_pq", ...
+    batch_size: int = 10     # 10 câu/batch × 3 contexts × 3 metrics ≈ 1,350 TPM (≤ 6,000 TPM Groq)
+
+@app.post("/api/benchmark/evaluate")
+async def evaluate_with_ragas(req: EvaluateRequest, background_tasks: BackgroundTasks):
+    """
+    Đánh giá RAGAS toàn bộ câu trả lời của 1 model từ bảng 'benchmarks'.
+    Chia thành các batch nhỏ (batch_size), chạy RAGAS từng batch,
+    tổng hợp điểm trung bình → lưu 1 dòng vào bảng 'ragas_results'.
+    
+    Dùng GOOGLE_API_KEY (key 1) — tách biệt hoàn toàn với generation.
+    Metrics: faithfulness, answer_relevancy, context_precision.
+    """
+    def run_evaluation():
+        try:
+            from ragas import evaluate as ragas_evaluate
+            from ragas.metrics import faithfulness, answer_relevancy, context_precision
+            from ragas.llms import LangchainLLMWrapper
+            from ragas.embeddings import LangchainEmbeddingsWrapper
+            from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+            from datasets import Dataset
+            import math
+
+            logger.info(f"[RAGAS] ===== BẮT ĐẦU ĐÁNH GIÁ MODEL: {req.model_name} =====")
+
+            eval_api_key = os.getenv("GOOGLE_API_KEY")  # Key 1 — tách quota với generation
+            eval_llm = ChatGoogleGenerativeAI(
+                model="gemini-3.1-flash-lite-preview",
+                google_api_key=eval_api_key,
+                temperature=0,
+            )
+            eval_embeddings = GoogleGenerativeAIEmbeddings(
+                model="models/embedding-001",
+                google_api_key=eval_api_key,
+            )
+
+            ragas_llm   = LangchainLLMWrapper(eval_llm)
+            ragas_embed = LangchainEmbeddingsWrapper(eval_embeddings)
+            metrics     = [faithfulness, answer_relevancy, context_precision]
+
+            # Lấy TOÀN BỘ câu trả lời của model từ Supabase
+            sm = SupabaseManager()
+            rows = sm.supabase.table("benchmarks") \
+                .select("question, answer, contexts, ground_truth") \
+                .eq("model_name", req.model_name) \
+                .neq("answer", "") \
+                .execute().data or []
+
+            if not rows:
+                logger.warning(f"[RAGAS] Không tìm thấy dữ liệu cho model '{req.model_name}'.")
+                return
+
+            total = len(rows)
+            n_batches = math.ceil(total / req.batch_size)
+            logger.info(f"[RAGAS] Tổng: {total} câu | Batch size: {req.batch_size} | Số batch: {n_batches}")
+
+            # Tích lũy điểm qua từng batch
+            all_faithfulness       = []
+            all_answer_relevancy   = []
+            all_context_precision  = []
+
+            # Ước tính số API calls để user nắm trước
+            MAX_CONTEXTS_PER_SAMPLE = 3  # 3 chunks/câu × ~1,500 tokens = ~4,500 tokens/batch
+            est_calls = total * (2 + 1 + MAX_CONTEXTS_PER_SAMPLE)
+            logger.info(f"[RAGAS] Ước tính API calls: {est_calls} "
+                        f"(faithfulness×2 + relevancy×1 + precision×{MAX_CONTEXTS_PER_SAMPLE} / câu)")
+            logger.info(f"[RAGAS] Giới hạn Gemini free tier: 1,500 RPD → "
+                        f"{'⚠️ CÓ THỂ BỊ RATE LIMIT' if est_calls > 1500 else '✅ Trong giới hạn'}")
+
+            for b in range(n_batches):
+                batch = rows[b * req.batch_size : (b + 1) * req.batch_size]
+                logger.info(f"[RAGAS] Đang chạy Batch {b+1}/{n_batches} ({len(batch)} câu)...")
+
+                try:
+                    dataset = Dataset.from_dict({
+                        "question":     [r["question"] for r in batch],
+                        "answer":       [r["answer"] or "" for r in batch],
+                        # Giới hạn tối đa 5 chunks/câu → giảm API calls context_precision
+                        "contexts":     [
+                            (r["contexts"][:MAX_CONTEXTS_PER_SAMPLE]
+                             if isinstance(r["contexts"], list) else
+                             ([r["contexts"]] if r["contexts"] else [""]))
+                            for r in batch
+                        ],
+                        "ground_truth": [r.get("ground_truth") or "" for r in batch],
+                    })
+
+                    result = ragas_evaluate(
+                        dataset,
+                        metrics=metrics,
+                        llm=ragas_llm,
+                        embeddings=ragas_embed,
+                    )
+
+                    df = result.to_pandas()
+                    all_faithfulness      += df["faithfulness"].dropna().tolist()
+                    all_answer_relevancy  += df["answer_relevancy"].dropna().tolist()
+                    all_context_precision += df["context_precision"].dropna().tolist()
+
+                    logger.info(f"[RAGAS] Batch {b+1} xong | "
+                                f"faith={df['faithfulness'].mean():.4f} | "
+                                f"rel={df['answer_relevancy'].mean():.4f} | "
+                                f"prec={df['context_precision'].mean():.4f}")
+
+                except Exception as batch_err:
+                    logger.error(f"[RAGAS] Lỗi ở Batch {b+1}: {batch_err}")
+                    continue  # Vẫn tiếp tục batch tiếp theo
+
+                # Delay giữa các batch để tôn trọng TPM rate limit (Groq: 6,000 TPM)
+                if b < n_batches - 1:
+                    import time as _time
+                    delay_s = 90  # 90s đảm bảo chủ ngựa tốc độ token trong giới hạn
+                    logger.info(f"[RAGAS] Chờ {delay_s}s để rải token load (TPM safety)...")
+                    _time.sleep(delay_s)
+
+            # Tính trung bình tổng hợp
+            if not all_faithfulness:
+                logger.error("[RAGAS] Không có điểm nào được tính. Dừng lại.")
+                return
+
+            avg_faith  = round(float(np.mean(all_faithfulness)), 4)
+            avg_rel    = round(float(np.mean(all_answer_relevancy)), 4)
+            avg_prec   = round(float(np.mean(all_context_precision)), 4)
+            avg_ragas  = round(float(np.mean([avg_faith, avg_rel, avg_prec])), 4)
+
+            # Lưu 1 dòng tổng kết vào bảng ragas_results
+            sm.supabase.table("ragas_results").insert({
+                "model_name":        req.model_name,
+                "total_evaluated":   len(all_faithfulness),
+                "batch_size":        req.batch_size,
+                "faithfulness":      avg_faith,
+                "answer_relevancy":  avg_rel,
+                "context_precision": avg_prec,
+                "ragas_score":       avg_ragas,
+            }).execute()
+
+            logger.info(f"[RAGAS] ===== HOÀN THÀNH =====")
+            logger.info(f"[RAGAS] Model: {req.model_name} | "
+                        f"Faithfulness={avg_faith} | "
+                        f"Answer Relevancy={avg_rel} | "
+                        f"Context Precision={avg_prec} | "
+                        f"RAGAS Score={avg_ragas}")
+
+        except Exception as e:
+            logger.error(f"[RAGAS] Lỗi nghiêm trọng: {str(e)}")
+
+    background_tasks.add_task(run_evaluation)
+    total_batches = f"~{(483 // req.batch_size) + 1}"
+    return {
+        "message": f"Bắt đầu đánh giá RAGAS cho '{req.model_name}' | "
+                   f"Batch size={req.batch_size} | Ước tính {total_batches} batch. "
+                   f"Kết quả sẽ lưu vào bảng 'ragas_results'."
+    }
+
+@app.get("/api/benchmark/ragas-results")
+async def get_ragas_results():
+    """Lấy toàn bộ kết quả RAGAS từ bảng ragas_results để so sánh các model."""
+    sm = SupabaseManager()
+    try:
+        res = sm.supabase.table("ragas_results") \
+            .select("*") \
+            .order("created_at", desc=True) \
+            .execute()
+        return {"results": res.data or []}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 from chat_service import ChatService
 class ChatRequest(BaseModel):
     query: str
@@ -255,8 +492,10 @@ class BenchmarkQueryRequest(BaseModel):
 @app.post("/api/benchmark/query")
 async def benchmark_query(req: BenchmarkQueryRequest):
     import time
-    process = psutil.Process(os.getpid())
-    start_mem = process.memory_info().rss / (1024 * 1024)
+    tracker = MemoryTracker(os.getpid())
+    monitor_thread = threading.Thread(target=tracker.track, daemon=True)
+    monitor_thread.start()
+
     start_time = time.time()
     try:
         cs = ChatService()
@@ -264,16 +503,35 @@ async def benchmark_query(req: BenchmarkQueryRequest):
         contexts = []
         async for chunk in cs.chat_stream(req.query, "google", req.collection):
             data = json.loads(chunk)
-            if data["type"] == "text": full_answer += data["content"]
-            elif data["type"] == "context": contexts = data["content"]
+            # chat_service yield ra type "final" chứa toàn bộ kết quả
+            if data["type"] == "final":
+                full_answer = data.get("answer", "")
+                contexts = data.get("contexts", [])
+            # Fallback: nếu handler yield từng token riêng
+            elif data["type"] == "text":
+                full_answer += data["content"]
+            elif data["type"] == "context":
+                contexts = data["content"]
+
         latency = (time.time() - start_time) * 1000
-        peak_ram = max(0, (process.memory_info().rss / (1024 * 1024)) - start_mem)
-        return {
-            "answer": full_answer, "contexts": contexts,
-            "latency_ms": round(latency, 2), "peak_ram_mb": round(peak_ram, 2)
-        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        tracker.stop()        # Báo hiệu thread giám sát dừng qua Event
+        monitor_thread.join() # Chờ thread kết thúc sạch sẽ
+
+    base_ram   = round(tracker.start_mem, 2)      # RAM nền trước khi bắt đầu xử lý
+    peak_delta = round(tracker.peak_delta_mb, 2)  # RAM tăng thêm trong quá trình xử lý
+    total_ram  = round(base_ram + peak_delta, 2)  # Tổng RAM thực tế để serve 1 query
+
+    return {
+        "answer": full_answer,
+        "contexts": contexts,
+        "latency_ms": round(latency, 2),
+        "base_ram_mb": base_ram,
+        "peak_ram_mb": peak_delta,
+        "total_ram_mb": total_ram,
+    }
 
 @app.post("/run-auto-pipeline")
 async def run_auto_pipeline(req: IngestRequest, background_tasks: BackgroundTasks):

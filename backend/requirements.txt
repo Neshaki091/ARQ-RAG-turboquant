@@ -19,3 +19,5 @@ langchain-ollama
 langchain-groq
 langchain-google-genai
 tqdm
+ragas
+datasets

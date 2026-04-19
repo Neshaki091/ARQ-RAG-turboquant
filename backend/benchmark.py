@@ -98,7 +98,7 @@ class BenchmarkManager:
                 start_ram = self.get_current_ram()
                 
                 # Thực hiện gọi Handler
-                res = await handler.handle(query_text, model_name="groq", limit=limit, top_k=top_k)
+                res = await handler.handle(query_text, model_name="google", limit=limit, top_k=top_k)
                 
                 end_ram = self.get_current_ram()
 

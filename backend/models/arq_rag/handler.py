@@ -55,7 +55,7 @@ class ModelHandler:
             self.tq.tq_mse.centroids = np.load(centroids_path)
             logger.info(f"[ARQ-RAG] Đã load legacy centroids từ {centroids_path}")
 
-    async def handle(self, query, model_name, limit, top_k):
+    async def handle(self, query: str, model_name: str, limit: int = 50, top_k: int = 10, language: str = "en"):
         logger.info("=" * 60)
         logger.info("[ARQ-RAG] BẮT ĐẦU TÌM KIẾM CHUNK (TurboQuant + ADC Reranking)")
         logger.info(f"  Query: {query[:100]}{'...' if len(query) > 100 else ''}")
@@ -133,17 +133,19 @@ class ModelHandler:
             logger.warning(f"  [Tối ưu] Context quá lớn ({len(context_text)} ký tự). Đang cắt tỉa...")
             context_text = context_text[:MAX_CONTEXT_CHARS] + "\n\n[...Cắt tỉa...]"
 
-        system_instructions = rf"""Bạn là một chuyên gia RAG. Đọc <NGỮ CẢNH> bên dưới và TRẢ LỜI CÂU HỎI một cách NGẮN GỌN, TRỰC TIẾP.
+        lang_instruction = "Rả lời bằng Tiếng Việt." if language == "vi" else "Respond in English."
+        system_instructions = rf"""You are a RAG expert. Read the <CONTEXT> below and answer the question CONCISELY and DIRECTLY.
 
-QUY TẮC:
-1. NGẮN GỌN: Chỉ trả lời ý chính, không chào hỏi, không kết luận rườm rà.
-2. LATEX: Dùng Markdown LaTeX ($...$ hoặc $$...$$).
-3. NGUỒN: Bắt đầu câu trả lời bằng [ARQ-RAG].
+RULES:
+1. CONCISE: Only answer the main point, no greetings, no verbose conclusions.
+2. LATEX: Use Markdown LaTeX ($...$ or $$...$$) for formulas.
+3. SOURCE: Start your answer with [ARQ-RAG].
+4. LANGUAGE: {lang_instruction}
 
-<NGỮ CẢNH>:
+<CONTEXT>:
 {context_text}
 
-CÂU HỎI: "{query}" """
+QUESTION: "{query}" """
 
         llm = self.cs.get_llm(model_name)
         messages = [HumanMessage(content=system_instructions)]
@@ -166,6 +168,8 @@ CÂU HỎI: "{query}" """
         return {
             "answer": answer,
             "sources": [{"file": h.payload["file"], "content": h.payload["content"]} for h in top_hits],
-            "contexts": final_contexts, # Trả về context để ChatService có thể chấm điểm Ragas sau
-            "latency": round(latency, 2)
+            "contexts": final_contexts,
+            "latency": round(latency, 2),
+            "retrieval_latency_ms": round(search_time * 1000, 2),   # Thời gian Qdrant search
+            "rerank_latency_ms": round(rerank_time * 1000, 2),       # Thời gian ADC reranking (của ARQ)
         }

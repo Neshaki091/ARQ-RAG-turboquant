@@ -1,4 +1,5 @@
 import os
+import re
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage
 from .supabase_client import SupabaseManager
@@ -10,15 +11,31 @@ class QueryAnalyzer:
             model_name="llama-3.1-8b-instant",
             api_key=os.getenv("GROQ_API_KEY"),
             temperature=0,
+            max_tokens=10,       # Chỉ cần trả về 1 từ (EASY/NORMAL/HARD/EXTREME)
             max_retries=3,
             request_timeout=30
         )
+
+    def _detect_language(self, query: str) -> str:
+        """Phát hiện ngôn ngữ bằng regex — không tốn API call.
+        Trả về 'vi' nếu có ký tự tiếng Việt, 'en' nếu không."""
+        # Unicode range cho ký tự có dấu tiếng Việt
+        vietnamese_pattern = re.compile(
+            r'[àáâãèéêìíòóôõùúýăđơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỷỹỵ'
+            r'ÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚÝĂĐƠƯẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼẾỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỶỸỴ]'
+        )
+        if vietnamese_pattern.search(query):
+            return "vi"
+        return "en"
 
     def analyze(self, query: str) -> dict:
         """
         Phân tích câu hỏi và trả về cấu hình RAG tương ứng.
         Sử dụng Supabase Cache để tối ưu hóa.
         """
+        # 0. Phát hiện ngôn ngữ (không cần LLM, nhanh)
+        language = self._detect_language(query)
+
         # 1. Kiểm tra Cache từ Supabase
         cache_data = self.sm.get_query_cache(query)
         
@@ -46,20 +63,19 @@ class QueryAnalyzer:
             "complexity": label,
             "limit": limit_val,
             "top_k": top_k_val,
+            "language": language,   # "vi" hoặc "en"
             "label": f"🧠 Chế độ: {label} ({config['desc']} | Scan={limit_val}, Focus={top_k_val})"
         }
 
     def _classify_with_llm(self, query: str) -> str:
         """Sử dụng Llama 3.1 8B để phân loại câu hỏi vào 4 nhãn: EASY, NORMAL, HARD, EXTREME."""
         try:
-            prompt = f"""You are a RAG Query Analyzer. Categorize the following research question into one of four levels:
-- EASY: Simple definition, short lookup, or factual info.
-- NORMAL: Detailed explanation, procedure, or single-concept analysis.
-- HARD: Mathematical proof, complex comparison, or multi-paper synthesis.
-- EXTREME: Holistic review across many papers, complex architectural comparison, or deep methodology derivation.
-
-Question: {query}
-Respond with ONLY ONE WORD: EASY, NORMAL, HARD, or EXTREME. Do not write anything else."""
+            # Cắt ngắn câu hỏi tối đa 300 ký tự để tránh vượt giới hạn TPM của Groq
+            truncated_query = query[:300] if len(query) > 300 else query
+            prompt = f"""Classify this research question into ONE of: EASY, NORMAL, HARD, EXTREME.
+EASY=simple fact. NORMAL=explanation. HARD=complex analysis. EXTREME=multi-paper synthesis.
+Question: {truncated_query}
+Respond with ONE WORD only."""
             
             messages = [HumanMessage(content=prompt)]
             response = self.llm.invoke(messages)

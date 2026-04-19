@@ -113,8 +113,16 @@ export default function Dashboard() {
           if (!line.trim()) return;
           try {
             const data = JSON.parse(line);
-            if (data.type === "text") {
+            if (data.type === "final") {
+              // Backend trả về câu trả lời đầy đủ
+              assistantMsg.content = data.answer || "";
+              setMessages(prev => [...prev.slice(0, -1), { ...assistantMsg }]);
+            } else if (data.type === "text") {
+              // Fallback: streaming token-by-token
               assistantMsg.content += data.content;
+              setMessages(prev => [...prev.slice(0, -1), { ...assistantMsg }]);
+            } else if (data.type === "error") {
+              assistantMsg.content = `❌ ${data.message}`;
               setMessages(prev => [...prev.slice(0, -1), { ...assistantMsg }]);
             }
           } catch (e) {}

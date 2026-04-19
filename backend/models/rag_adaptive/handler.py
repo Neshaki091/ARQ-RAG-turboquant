@@ -13,7 +13,7 @@ class ModelHandler:
         self.cs = chat_service
         self.vm = VectorStoreManager()
 
-    async def handle(self, query, model_name, limit, top_k):
+    async def handle(self, query, model_name, limit, top_k, language: str = "en"):
         logger.info("=" * 60)
         logger.info("[RAG-Adaptive] BẮT ĐẦU TÌM KIẾM CHUNK")
         logger.info(f"  Query: {query[:100]}{'...' if len(query) > 100 else ''}")
@@ -66,17 +66,19 @@ class ModelHandler:
             logger.warning(f"  [Tối ưu] Context quá lớn ({len(context_text)} ký tự). Đang cắt tỉa...")
             context_text = context_text[:MAX_CONTEXT_CHARS] + "\n\n[...Cắt tỉa...]"
 
-        system_instructions = rf"""Bạn là một chuyên gia RAG. Đọc <NGỮ CẢNH> bên dưới và TRẢ LỜI CÂU HỎI một cách NGẮN GỌN, TRỰC TIẾP.
+        lang_instruction = "Rả lời bằng Tiếng Việt." if language == "vi" else "Respond in English."
+        system_instructions = rf"""You are a RAG expert. Read the <CONTEXT> below and answer CONCISELY and DIRECTLY.
 
-QUY TẮC:
-1. NGẮN GỌN: Chỉ trả lời ý chính, không chào hỏi, không kết luận rườm rà.
-2. LATEX: Dùng Markdown LaTeX ($...$ hoặc $$...$$).
-3. NGUỒN: Bắt đầu câu trả lời bằng [RAG-Adaptive].
+RULES:
+1. CONCISE: Only answer the main point, no greetings, no verbose conclusions.
+2. LATEX: Use Markdown LaTeX ($...$ or $$...$$) for formulas.
+3. SOURCE: Start your answer with [RAG-Adaptive].
+4. LANGUAGE: {lang_instruction}
 
-<NGỮ CẢNH>:
+<CONTEXT>:
 {context_text}
 
-CÂU HỎI: "{query}" """
+QUESTION: "{query}" """
 
         llm = self.cs.get_llm(model_name)
         messages = [HumanMessage(content=system_instructions)]
