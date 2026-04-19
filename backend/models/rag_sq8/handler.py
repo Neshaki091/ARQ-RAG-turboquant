@@ -44,16 +44,11 @@ class ModelHandler:
                          f"max={max(s for s in scores if s is not None):.4f}"
                          if any(s is not None for s in scores) else "    Qdrant scores: N/A")
 
-        # 3. Select top_k contexts (SQ8 quantized, no manual rerank)
+        # 3. Select contexts (Baseline thuần: Lấy trực tiếp từ kết quả nén SQ8 của Qdrant)
+        final_contexts = [hit.payload["content"] for hit in search_results[:top_k]]
         top_hits = search_results[:top_k]
-        top_hits = search_results[:top_k]
-        raw_contexts = [hit.payload["content"] for hit in top_hits]
         
-        # [MỚI] Khử nhiễu ngữ cảnh - Lấy Top theo dynamic top_k
-        final_contexts = filter_relevant_contexts(query, raw_contexts, top_n=top_k)
-        
-        logger.info(f"  [Bước 3] Lọc ngữ cảnh: {len(raw_contexts)} -> {len(final_contexts)} chunk chất lượng")
-        logger.info(f"  [Bước 3] Chọn top_k={top_k} chunk (SQ8 quantized search, không manual rerank)")
+        logger.info(f"  [Bước 3] Chọn top_k={top_k} chunk (SQ8 quantized search, không lọc nhiễu)")
         for i, hit in enumerate(top_hits):
             score = getattr(hit, 'score', 'N/A')
             content_preview = hit.payload["content"][:80].replace('\n', ' ')

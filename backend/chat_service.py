@@ -10,8 +10,9 @@ logger = logging.getLogger("ChatService")
 # Shared Imports
 from shared.embed import EmbeddingManager
 from shared.vector_store import VectorStoreManager
-from shared.ragas_eval import RagasEvaluator
+from shared.evaluation_center import AdvancedEvaluator
 from shared.query_analyzer import QueryAnalyzer
+import psutil
 
 # LangChain Imports
 from langchain_groq import ChatGroq
@@ -29,8 +30,9 @@ class ChatService:
     def __init__(self):
         self.embed_manager = EmbeddingManager()
         self.vector_manager = VectorStoreManager()
-        self.ragas_evaluator = RagasEvaluator()
+        self.advanced_evaluator = AdvancedEvaluator()
         self.query_analyzer = QueryAnalyzer()
+        self.process = psutil.Process() # Theo dõi tiến trình hiện tại
         
         # Initialize specialized Model Handlers (one per researcher/model)
         self.handlers = {
@@ -43,10 +45,19 @@ class ChatService:
         
     def get_llm(self, model_name: str = None):
         """Hệ thống Routing đa nền tảng cho ARQ-RAG."""
-        # Ưu tiên Gemini 3.1 Flash Lite Preview làm Generator mặc định (Tận dụng 1M Context)
-        if model_name is None or model_name.lower() in ["groq", "gemma-4-31b"]:
-            model_name = "gemini-3.1-flash-lite-preview"
-            
+        if model_name is None:
+            model_name = "gemma-4-26b-it"
+        
+        # Đảm bảo routing cho các tên model cụ thể của người dùng
+        if "gemma-4" in model_name.lower():
+            return ChatGoogleGenerativeAI(
+                model=model_name,
+                google_api_key=os.getenv("GOOGLE_API_KEY"),
+                temperature=0,
+                max_output_tokens=2048,
+                request_timeout=60
+            )
+
         # 1. Routing tới Google Generative AI (Gemini / Gemma)
         if "gemini" in model_name.lower() or "gemma" in model_name.lower():
             return ChatGoogleGenerativeAI(
@@ -56,10 +67,10 @@ class ChatService:
                 request_timeout=60
             )
         
-        # 2. Routing tới Groq (Llama / Qwen)
+        # 2. Routing tới Groq (Llama / Qwen) - Fallback
         return ChatGroq(
-            model_name=model_name,
-            api_key=os.getenv("GROQ_API_KEY"),
+            model_name="llama-3.1-8b-instant", # Safe default for Groq fallback
+            groq_api_key=os.getenv("GROQ_API_KEY"),
             temperature=0,
             max_tokens=2048,
             max_retries=3,
@@ -90,20 +101,26 @@ class ChatService:
         
         yield json.dumps({"type": "status", "message": "🔍 Đang trích xuất đặc trưng câu hỏi..."}) + "\n"
         
-        # Adaptive logic (shared across relevant models)
-        limit = 40
-        top_k = 15
-        if collection_name in ["vector_adaptive", "vector_arq"]:
-            yield json.dumps({"type": "status", "message": "🧠 Phân tích độ phức tạp (Adaptive Mode)..."}) + "\n"
-            analysis = self.query_analyzer.analyze(query)
-            logger.info(f"  [Adaptive] Kết quả phân tích: complexity={analysis['complexity']}, "
-                         f"limit={analysis['limit']}, top_k={analysis['top_k']}")
-            yield json.dumps({"type": "status", "message": f"📌 {analysis['label']}"}) + "\n"
-            limit = analysis["limit"]
-            top_k = analysis["top_k"]
+        # 1. Unified Query Analysis (Chạy cho tất cả các mô hình)
+        yield json.dumps({"type": "status", "message": "🧠 Phân tích độ phức tạp câu hỏi..."}) + "\n"
+        analysis = self.query_analyzer.analyze(query)
+        
+        limit = analysis["limit"]
+        top_k = analysis["top_k"]
+        complexity = analysis["complexity"]
+        
+        # 2. Phân tách tham số: Baseline (Brute-force) vs Research (Optimized)
+        is_baseline = collection_name in ["vector_raw", "vector_pq", "vector_sq8"]
+        
+        if is_baseline:
+            # Đối với Baseline: Dùng toàn bộ những gì tìm được để làm Upper Bound chính xác nhất
+            top_k = limit
+            logger.info(f"  [Baseline Mode] {collection_name} | complexity={complexity} | limit=top_k={limit}")
+            yield json.dumps({"type": "status", "message": f"🛡️ Chế độ: BASELINE ({complexity}) | Full Context={limit}"}) + "\n"
         else:
-            logger.info(f"  [Standard] Sử dụng tham số cố định: limit={limit}, top_k={top_k}")
-            yield json.dumps({"type": "status", "message": "🛡️ Chế độ xử lý: STANDARD (Cố định)"}) + "\n"
+            # Đối với ARQ/Adaptive: Dùng cơ chế lọc tinh túy (Efficiency)
+            logger.info(f"  [Research Mode] {collection_name} | complexity={complexity} | limit={limit}, top_k={top_k}")
+            yield json.dumps({"type": "status", "message": f"⚡ Chế độ: {collection_name.upper()} ({complexity}) | Search={limit}, Focus={top_k}"}) + "\n"
 
         # Delegate to the specific Model Handler
         handler = self.handlers.get(collection_name)
@@ -116,32 +133,39 @@ class ChatService:
         yield json.dumps({"type": "status", "message": f"⚡ Đang chạy quy trình RAG của mô hình {collection_name}..."}) + "\n"
         
         try:
-            # 1. Process request via specific handler (Generation Phase) - with timeout
+            # 1. Bắt đầu đo hiệu năng
+            start_time = time.time()
+            start_mem = self.process.memory_info().rss / (1024 * 1024) # MB
+
+            # 2. Xử lý yêu cầu qua handler
             import asyncio
             try:
-                result = await asyncio.wait_for(handler.handle(query, model_name, limit, top_k), timeout=90)
+                result = await asyncio.wait_for(handler.handle(query, model_name, limit, top_k), timeout=120)
             except asyncio.TimeoutError:
-                yield json.dumps({"type": "error", "message": "⏳ Timeout: LLM không phản hồi trong 90 giây. Hãy thử lại hoặc chọn mô hình Ollama Local."}) + "\n"
+                yield json.dumps({"type": "error", "message": "⏳ Timeout: LLM không phản hồi trong 120 giây."}) + "\n"
                 return
             
-            # 2. Yield final text response immediately to the UI
-            # Tích hợp đánh giá RAGAS cho Chat mode (Cần thiết cho Nghiên cứu/Luận văn)
-            yield json.dumps({"type": "status", "message": f"📊 Đang chấm điểm chất lượng (RAGAS + {self.ragas_evaluator.model_name})..."}) + "\n"
+            # 3. Kết thúc đo hiệu năng
+            end_time = time.time()
+            end_mem = self.process.memory_info().rss / (1024 * 1024) # MB
             
-            scores = {"faithfulness": 0.0, "answer_relevancy": 0.0, "answer_relevance": 0.0}
-            if "contexts" in result and result["answer"]:
-                try:
-                    scores = self.ragas_evaluator.evaluate(query, result["contexts"], result["answer"])
-                except Exception as eval_err:
-                    logger.error(f"  [RAGAS] Lỗi chấm điểm: {eval_err}")
+            latency_ms = int((end_time - start_time) * 1000)
+            peak_ram_mb = round(max(0, end_mem - start_mem), 2)
+            
+            logger.info(f"  [Performance] Latency: {latency_ms}ms | RAM Info: {round(end_mem, 2)}MB")
 
             final_result = {
                 "type": "final",
                 **result,
                 "method": collection_name,
-                "scores": scores
+                "metrics": {
+                    "latency_ms": latency_ms,
+                    "peak_ram_mb": peak_ram_mb,
+                    "total_ram_mb": round(end_mem, 2)
+                }
             }
             yield json.dumps(final_result) + "\n"
 
         except Exception as e:
+            logger.error(f"  [ChatService] Lỗi Handler: {str(e)}")
             yield json.dumps({"type": "error", "message": f"Lỗi Handler: {str(e)}"}) + "\n"

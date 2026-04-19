@@ -85,7 +85,8 @@ class CloudVectorStore:
             payload = {
                 "file": chunk.get("file"),
                 "chunk_id": chunk.get("chunk_id"),
-                "content": chunk.get("content")
+                "content": chunk.get("content"),
+                "topic": chunk.get("topic", "General") # Thêm nhãn topic vào payload Qdrant
             }
             if extra_payloads and i < len(extra_payloads):
                 payload.update(extra_payloads[i])
@@ -206,7 +207,8 @@ def main():
                 chunks.append({
                     "file": target_file,
                     "chunk_id": f"{paper_id}_{idx}",
-                    "content": content
+                    "content": content,
+                    "topic": paper.get("topic", "General") # Lấy topic từ metadata bài báo
                 })
 
             # Get Embeddings

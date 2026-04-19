@@ -41,12 +41,9 @@ class ModelHandler:
                          f"max={max(s for s in scores if s is not None):.4f}"
                          if any(s is not None for s in scores) else "    Qdrant scores: N/A")
 
-        # 3. Select top_k contexts
+        # 3. Select contexts (Baseline thuần: Lấy trực tiếp từ Qdrant)
+        final_contexts = [hit.payload["content"] for hit in search_results[:top_k]]
         top_hits = search_results[:top_k]
-        raw_contexts = [hit.payload["content"] for hit in top_hits]
-        
-        # [MỚI] Khử nhiễu ngữ cảnh - Lấy Top theo dynamic top_k
-        final_contexts = filter_relevant_contexts(query, raw_contexts, top_n=top_k)
         
         # 4. Generation (Sử dụng Gemini 3.1 Flash Lite - Hỗ trợ Long Context)
         MAX_CONTEXT_CHARS = 120000

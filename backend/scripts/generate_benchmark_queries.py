@@ -3,10 +3,12 @@ import json
 import asyncio
 import logging
 import random
+import sys
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
-import sys
+from qdrant_client import QdrantClient
+from qdrant_client.http import models
 
 # Đảm bảo có thể import module từ thư mục cha
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
@@ -14,135 +16,151 @@ from shared.supabase_client import SupabaseManager
 
 load_dotenv()
 
-# Thiết lập Logger để hiện lên UI Dashboard
-logger = logging.getLogger("Benchmark")
+# Thiết lập Logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("CloudBenchmark")
 
-async def generate_benchmark_topic_based():
-    sm = SupabaseManager()
-    
-    # 1. Tải danh sách Chunks
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    data_path = os.path.join(current_dir, "..", "data", "chunks.json")
-    
-    if not os.path.exists(data_path):
-        logger.error(f"❌ Không tìm thấy {data_path}. Vui lòng chạy Ingest trước.")
-        return
+class CloudBenchmarkGenerator:
+    def __init__(self):
+        self.sm = SupabaseManager()
+        self.qdrant_url = os.getenv("QDRANT_CLOUD_URL")
+        self.qdrant_key = os.getenv("QDRANT_CLOUD_API_KEY")
+        
+        if not self.qdrant_url or not self.qdrant_key:
+            raise ValueError("❌ Thiếu QDRANT_CLOUD_URL hoặc QDRANT_CLOUD_API_KEY trong môi trường.")
+            
+        self.qdrant = QdrantClient(url=self.qdrant_url, api_key=self.qdrant_key)
+        
+        # Khởi tạo LLM (Sử dụng Gemma 4 31B để sinh câu hỏi chất lượng cao nhất)
+        self.llm = ChatGoogleGenerativeAI(
+            model="gemma-4-31b-it",
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+            temperature=0.3,
+            n=1 # Rất quan trọng cho dòng mô hình Gemma
+        )
+        
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", "You are an elite research evaluator. Based on the provided research paper fragments (chunks), "
+                       "generate EXACTLY 5 high-quality, distinct technical questions and their precise ground truth answers. "
+                       "Each question must be challenging and technical. "
+                       "Format your response as a valid JSON array of objects: "
+                       '[{"question": "Q1...", "ground_truth": "A1..."}, {"question": "Q2...", "ground_truth": "A2..."}, ...]'),
+            ("human", "Topic: {topic}\n\nContext Chunks:\n{context}")
+        ])
+        
+        self.chain = self.prompt | self.llm
 
-    with open(data_path, "r", encoding="utf-8") as f:
-        all_chunks = json.load(f)
-
-    # 2. Lấy danh sách bài báo đã được Embed thành công từ Database
-    papers = sm.get_all_papers()
-    embedded_paper_ids = {p["id"] for p in papers if p.get("is_embedded")}
-    
-    if not embedded_paper_ids:
-        logger.warning("⚠️ Không tìm thấy bài báo nào có trạng thái 'is_embedded = True'.")
-        logger.info("Gợi ý: Cần chạy quy trình Ingest/Embed cho các PDF đã cào trước khi sinh bộ đề.")
-        return
-
-    # Lọc chunks chỉ lấy từ các bài báo đã embed
-    valid_chunks = [c for c in all_chunks if c.get("file", "").split("_")[0] in embedded_paper_ids]
-    
-    if not valid_chunks:
-        logger.error("❌ Không có chunk nào từ các bài báo đã embed.")
-        return
-
-    # 3. Phân nhóm Chunks theo Topic
-    # Nếu chunk chưa có nhãn topic (do chưa chạy Ingest mới), ta tra cứu từ Database
-    topic_map = {p["id"]: p["topic"] for p in papers}
-    
-    chunks_by_topic = {}
-    for c in valid_chunks:
-        arxiv_id = c.get("file", "").split("_")[0]
-        topic = c.get("topic") or topic_map.get(arxiv_id, "General")
-        if topic not in chunks_by_topic:
-            chunks_by_topic[topic] = []
-        chunks_by_topic[topic].append(c)
-
-    logger.info(f"📊 Đã sẵn sàng dữ liệu cho {len(chunks_by_topic)} nhóm chủ đề.")
-
-    # 4. Khởi tạo LLM (Sử dụng Gemma 4 31B để sinh câu hỏi chất lượng cao nhất)
-    llm = ChatGoogleGenerativeAI(
-        model="gemma-4-31b-it",
-        google_api_key=os.getenv("GOOGLE_API_KEY"),
-        temperature=0.3
-    )
-
-    prompt = ChatPromptTemplate.from_messages([
-        ("system", "You are an elite research evaluator. Based on the provided research paper fragments (chunks), "
-                   "generate ONE high-quality technical question and its precise ground truth answer. "
-                   "The question must be challenging and suitable for academic benchmarking. "
-                   "Focus on the methodology, results, or specific technical innovations mentioned. "
-                   "Format your response as a valid JSON object: "
-                   '{{"question": "...", "ground_truth": "..."}}'),
-        ("human", "Topic: {topic}\n\nContext Chunks:\n{context}")
-    ])
-
-    chain = prompt | llm
-
-    # 5. Vòng lặp sinh theo từng Topic (Mục tiêu ~500 câu tổng cộng)
-    TOPICS = ["TurboQuant", "ARQ", "PQ", "RAG", "ML_Optimization", "LLM_Inference"]
-    TARGET_PER_TOPIC = 85
-
-    # Lấy thống kê hiện tại từ Supabase
-    existing_queries = sm.get_benchmark_queries()
-    topic_counts = {}
-    for q in existing_queries:
-        t = q.get("topic", "General")
-        topic_counts[t] = topic_counts.get(t, 0) + 1
-
-    for topic in TOPICS:
-        current_count = topic_counts.get(topic, 0)
-        if current_count >= TARGET_PER_TOPIC:
-            logger.info(f"✅ Nhóm [{topic}] đã đủ {current_count} câu hỏi. Bỏ qua.")
-            continue
-
-        topic_chunks = chunks_by_topic.get(topic, [])
-        if not topic_chunks:
-            logger.warning(f"⚠️ Nhóm [{topic}] không có dữ liệu (chưa cào bài báo nào?).")
-            continue
-
-        needed = TARGET_PER_TOPIC - current_count
-        logger.info(f"🚀 Bắt đầu sinh thêm {needed} câu hỏi cho nhóm [{topic}]...")
-
-        for i in range(needed):
-            try:
-                # Chọn 2-3 chunk ngẫu nhiên từ nhóm để làm ngữ cảnh sinh 1 câu
-                # (Đảm bảo tính đa dạng thay vì chỉ dùng 1 chunk)
-                sample_chunks = random.sample(topic_chunks, min(2, len(topic_chunks)))
-                context_text = "\n\n---\n\n".join([c["content"] for c in sample_chunks])
-                source_files = list(set(c["file"] for c in sample_chunks))
-
-                # Gọi AI
-                response = await chain.ainvoke({"topic": topic, "context": context_text})
-                
-                # Parse JSON
-                content = response.content
-                if "```json" in content:
-                    content = content.split("```json")[1].split("```")[0]
-                elif "```" in content:
-                    content = content.split("```")[1].split("```")[0]
-                
-                data = json.loads(content.strip())
-                
-                if "question" in data and "ground_truth" in data:
-                    # Lưu trực tiếp lên Supabase (Sinh 1 Lưu 1)
-                    sm.save_single_benchmark_query(
-                        question=data["question"],
-                        ground_truth=data["ground_truth"],
-                        topic=topic,
-                        source_files=source_files
+    def get_random_chunks_from_qdrant(self, topic: str, limit: int = 5):
+        """Lấy ngẫu nhiên các đoạn văn bản từ Qdrant theo Topic."""
+        try:
+            # Sử dụng Filter để lọc theo Topic
+            query_filter = models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="topic",
+                        match=models.MatchValue(value=topic)
                     )
-                    logger.info(f"   [{topic}] Tiến độ: {current_count + i + 1}/{TARGET_PER_TOPIC}")
+                ]
+            )
+            
+            # Scroll lấy dữ liệu ngẫu nhiên (sử dụng offset ngẫu nhiên nếu cần, nhưng đơn giản nhất là scroll)
+            res, _ = self.qdrant.scroll(
+                collection_name="vector_raw",
+                scroll_filter=query_filter,
+                limit=limit * 2, # Lấy dư ra một chút để chọn ngẫu nhiên
+                with_payload=True,
+                with_vectors=False
+            )
+            
+            if not res:
+                return []
                 
-                # Rate limit safety (Google 15 RPM -> Chờ 10 giây cho an toàn)
-                await asyncio.sleep(10)
+            selected = random.sample(res, min(limit, len(res)))
+            return [{
+                "content": p.payload.get("content"),
+                "file": p.payload.get("file")
+            } for p in selected]
+            
+        except Exception as e:
+            logger.error(f"❌ Lỗi khi truy vấn Qdrant cho topic {topic}: {e}")
+            return []
 
-            except Exception as e:
-                logger.error(f"❌ Lỗi khi sinh câu hỏi nhóm {topic}: {e}")
-                await asyncio.sleep(5)
+    async def run(self, target_per_topic=85):
+        TOPICS = ["TurboQuant", "ARQ", "PQ", "RAG", "ML_Optimization", "LLM_Inference"]
+        
+        # 1. Tính toán số lượng chunk nạp vào dựa trên tổng số dữ liệu
+        try:
+            collection_info = self.qdrant.get_collection("vector_raw")
+            total_chunks = collection_info.points_count
+            # Công thức: Tổng số chunk / 500 (Mục tiêu 500 câu hỏi)
+            # Đảm bảo tối thiểu 5 chunk và tối đa 100 chunk để tránh quá tải prompt
+            chunks_per_request = max(5, min(100, total_chunks // 500))
+            logger.info(f"📊 Hệ thống phát hiện {total_chunks} chunks. Tối ưu: nạp {chunks_per_request} chunks/lần sinh.")
+        except Exception as e:
+            logger.warning(f"⚠️ Không lấy được số lượng chunk, dùng mặc định 10. Lỗi: {e}")
+            chunks_per_request = 10
 
-    logger.info("🎉 HOÀN THÀNH TOÀN BỘ QUY TRÌNH SINH GROUND TRUTH!")
+        # 2. Kiểm tra trạng thái hiện tại từ Supabase
+        existing_queries = self.sm.get_benchmark_queries()
+        topic_counts = {}
+        for q in existing_queries:
+            t = q.get("topic", "General")
+            topic_counts[t] = topic_counts.get(t, 0) + 1
+            
+        logger.info(f"📊 Bắt đầu quy trình Cloud Benchmark. Mục tiêu: {target_per_topic} câu/topic.")
+
+        for topic in TOPICS:
+            current_count = topic_counts.get(topic, 0)
+            if current_count >= target_per_topic:
+                logger.info(f"✅ Nhóm [{topic}] đã đủ {current_count} câu. Bỏ qua.")
+                continue
+
+            needed = target_per_topic - current_count
+            needed_requests = (needed + 4) // 5
+            
+            logger.info(f"🚀 Nhóm [{topic}]: Cần thêm {needed} câu. Thực hiện {needed_requests} lượt gọi AI...")
+
+            for r in range(needed_requests):
+                try:
+                    # 1. Lấy ngữ cảnh trực tiếp từ Qdrant với số lượng chunk đã tính toán
+                    sample_chunks = self.get_random_chunks_from_qdrant(topic, limit=chunks_per_request)
+                    if not sample_chunks:
+                        logger.warning(f"⚠️ Không tìm thấy chunk nào trên Qdrant cho topic [{topic}]. Có thể cần Ingest dữ liệu mới.")
+                        break
+
+                    context_text = "\n\n---\n\n".join([c["content"] for c in sample_chunks])
+                    source_files = list(set(c["file"] for c in sample_chunks))
+
+                    # 2. Gọi AI sinh câu hỏi
+                    response = await self.chain.ainvoke({"topic": topic, "context": context_text})
+                    
+                    # 3. Parse và Lưu
+                    content = response.content
+                    if "```json" in content:
+                        content = content.split("```json")[1].split("```")[0]
+                    elif "```" in content:
+                        content = content.split("```")[1].split("```")[0]
+                    
+                    qa_list = json.loads(content.strip())
+                    
+                    if isinstance(qa_list, list):
+                        for data in qa_list:
+                            self.sm.save_single_benchmark_query(
+                                question=data["question"],
+                                ground_truth=data["ground_truth"],
+                                topic=topic,
+                                source_files=source_files
+                            )
+                        logger.info(f"   [{topic}] Batch {r+1}/{needed_requests} thành công.")
+                    
+                    await asyncio.sleep(5) # Rate limit safety cho Gemini Flash
+
+                except Exception as e:
+                    logger.error(f"❌ Lỗi vòng lặp sinh {topic}: {e}")
+                    await asyncio.sleep(10)
+
+        logger.info("🎉 HOÀN THÀNH QUY TRÌNH SINH GROUND TRUTH CLOUD NATIVE!")
 
 if __name__ == "__main__":
-    asyncio.run(generate_benchmark_topic_based())
+    generator = CloudBenchmarkGenerator()
+    asyncio.run(generator.run())

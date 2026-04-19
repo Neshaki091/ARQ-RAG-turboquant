@@ -14,7 +14,9 @@ import {
   CheckCircle2,
   Loader2,
   Trash2,
-  Terminal
+  Terminal,
+  Clock,
+  Zap
 } from "lucide-react";
 import {
   LineChart,
@@ -115,8 +117,8 @@ export default function Dashboard() {
                 setMessages(prev => prev.map(m =>
                   m.id === assistantMsgId ? {
                     ...m,
-                    scores: data.scores,
-                    status: null // Tắt trạng thái đang chấm điểm
+                    metrics: data.metrics,
+                    status: null // Tắt trạng thái đang xử lý
                   } : m
                 ));
               } else {
@@ -126,8 +128,7 @@ export default function Dashboard() {
                     ...m,
                     content: data.answer,
                     status: null,
-                    scores: data.scores,
-                    latency: data.latency,
+                    metrics: data.metrics,
                     sources: data.sources
                   } : m
                 ));
@@ -439,18 +440,23 @@ export default function Dashboard() {
                         {m.content}
                       </ReactMarkdown>
                     </div>
-                    {m.latency ? (
-                      <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
-                        <div className="flex justify-between text-[10px] uppercase tracking-tighter text-slate-400 font-bold items-center">
-                          <span>{m.scores ? "Quality Metrics (RAGAS)" : "System Metrics"}</span>
-                          <span className="bg-slate-100 px-2 py-1 rounded text-blue-600">⏳ {Math.round(m.latency * 1000)} ms</span>
+                    {m.metrics ? (
+                      <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-3">
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-blue-50 border border-blue-100/50 shadow-sm transition-all hover:shadow-md">
+                          <Clock size={12} className="text-blue-600" />
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Latency</span>
+                          <span className="text-[11px] font-extrabold text-blue-700">{m.metrics.latency_ms}ms</span>
                         </div>
-                        {m.scores && (
-                          <div className="space-y-1 mt-2">
-                            <MetricBar label="Faithfulness" value={m.scores.faithfulness} color="bg-emerald-500" />
-                            <MetricBar label="Relevance" value={m.scores.answer_relevancy} color="bg-blue-500" />
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-purple-50 border border-purple-100/50 shadow-sm transition-all hover:shadow-md">
+                          <Cpu size={12} className="text-purple-600" />
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Peak RAM</span>
+                          <span className="text-[11px] font-extrabold text-purple-700">{m.metrics.peak_ram_mb}MB</span>
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-100/50 shadow-sm">
+                          <Zap size={12} className="text-emerald-600" />
+                          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tight">Efficiency</span>
+                          <span className="text-[11px] font-extrabold text-emerald-700">OPTIMIZED</span>
+                        </div>
                       </div>
                     ) : null}
                   </div>
@@ -581,24 +587,6 @@ export default function Dashboard() {
           background: #94a3b8;
         }
       `}</style>
-    </div>
-  );
-}
-
-function MetricBar({ label, value, color }: { label: string, value: number, color: string }) {
-  const percentage = (value * 100).toFixed(0);
-  return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-[9px] text-slate-500 uppercase">
-        <span>{label}</span>
-        <span>{percentage}%</span>
-      </div>
-      <div className="w-full bg-slate-900 h-1 rounded-full overflow-hidden">
-        <div
-          className={`${color} h-full transition-all duration-1000`}
-          style={{ width: `${percentage}%` }}
-        />
-      </div>
     </div>
   );
 }
