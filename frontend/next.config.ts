@@ -9,9 +9,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  // Đưa ra cấp cao nhất theo yêu cầu của phiên bản Next.js mới
-  // @ts-ignore - Bỏ qua cảnh báo type nếu có
-  allowedDevOrigins: ['apiarqrag.evbtranding.site', '172.29.32.1'],
   poweredByHeader: false,
   eslint: {
     ignoreDuringBuilds: true,
