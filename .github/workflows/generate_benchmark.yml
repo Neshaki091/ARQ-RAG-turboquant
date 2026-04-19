@@ -1,0 +1,38 @@
+name: Cloud Benchmark Generation
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_per_topic:
+        description: 'Target number of questions per research topic'
+        required: false
+        default: '85'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install qdrant-client supabase langchain-google-genai python-dotenv
+
+      - name: Run Benchmark Generator
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Dùng SERVICE_ROLE để có quyền ghi vào DB
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          QDRANT_CLOUD_URL: ${{ secrets.QDRANT_CLOUD_URL }}
+          QDRANT_CLOUD_API_KEY: ${{ secrets.QDRANT_CLOUD_API_KEY }}
+        run: |
+          # Chạy script sinh câu hỏi
+          python backend/scripts/generate_benchmark_queries.py

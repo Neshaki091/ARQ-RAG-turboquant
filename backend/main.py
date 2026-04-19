@@ -2,8 +2,14 @@ from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import os
+import uvicorn
 import logging
+import psutil
+
+# Tắt log thừa từ Google GenAI SDK
+logging.getLogger("google_genai").setLevel(logging.WARNING)
+logging.getLogger("langchain_google_genai").setLevel(logging.WARNING)
+import os
 import json
 import time
 import numpy as np
