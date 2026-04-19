@@ -4,7 +4,8 @@ node_modules/
 dist/
 .DS_Store
 auto-push.js
-
+#hugging face
+backendhug/
 # Storage / Database
 ollama_storage/
 qdrant_storage/

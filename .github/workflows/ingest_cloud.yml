@@ -11,6 +11,16 @@ on:
 jobs:
   ingest:
     runs-on: ubuntu-latest
+<<<<<<< HEAD
+=======
+    strategy:
+      fail-fast: false
+      matrix:
+        part_index: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+    
+    name: "Ingest Part ${{ matrix.part_index }}"
+    
+>>>>>>> ARQ-demo
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -49,4 +59,11 @@ jobs:
           OLLAMA_URL: http://localhost:11434
           PURGE_MODE: ${{ github.event.inputs.purge_mode }}
         run: |
+<<<<<<< HEAD
           python scripts/cloud/cloud_ingest.py
+=======
+          python scripts/cloud/cloud_ingest.py \
+            --total_parts 10 \
+            --part_index ${{ matrix.part_index }} \
+            --limit 115
+>>>>>>> ARQ-demo

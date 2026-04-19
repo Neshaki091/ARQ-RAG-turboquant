@@ -2,6 +2,7 @@ import os
 import time
 import logging
 import numpy as np
+import pickle
 from .quantization import TurboQuantProd
 from shared.vector_store import VectorStoreManager
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -16,12 +17,29 @@ class ModelHandler:
         # Initializing TurboQuant directly in the handler for "ownership"
         self.tq = TurboQuantProd(d=768, b=4)
         
-        # Load centroids if available
-        centroids_path = "backend/data/centroids.npy"
-        if os.path.exists(centroids_path):
+        # 1. Load Global Weights (New Unified Method)
+        weights_path = "backend/data/model_weights.pkl"
+        if os.path.exists(weights_path):
+            try:
+                with open(weights_path, "rb") as f:
+                    weights = pickle.load(f)
+                
+                # Load ARQ weights
+                arq_weights = weights.get("arq", {})
+                if arq_weights:
+                    self.tq.tq_mse.Pi = arq_weights.get("Pi", self.tq.tq_mse.Pi)
+                    self.tq.S = arq_weights.get("S", self.tq.S)
+                    self.tq.tq_mse.centroids = arq_weights.get("centroids", self.tq.tq_mse.centroids)
+                    self.tq.alpha = arq_weights.get("alpha", self.tq.alpha)
+                    logger.info(f"[ARQ-RAG] Đã load GLOBAL weights từ {weights_path}")
+            except Exception as e:
+                logger.error(f"[ARQ-RAG] Lỗi khi load global weights: {e}")
+        
+        # 2. Legacy: Load centroids if available (Fallthrough)
+        elif os.path.exists("backend/data/centroids.npy"):
+            centroids_path = "backend/data/centroids.npy"
             self.tq.tq_mse.centroids = np.load(centroids_path)
-            logger.info(f"[ARQ-RAG] Đã load centroids từ {centroids_path}, "
-                         f"shape={self.tq.tq_mse.centroids.shape}")
+            logger.info(f"[ARQ-RAG] Đã load legacy centroids từ {centroids_path}")
 
     async def handle(self, query, model_name, limit, top_k):
         logger.info("=" * 60)

@@ -30,9 +30,10 @@ class ModelHandler:
 
         # 2. Vector search (Qdrant)
         t1 = time.time()
-        search_results = self.vm.search("vector_adaptive", query_vector, limit=limit)
+        # Shared with vector_raw for efficiency
+        search_results = self.vm.search("vector_raw", query_vector, limit=limit)
         search_time = time.time() - t1
-        logger.info(f"  [Bước 2] Qdrant search collection='vector_adaptive' -> "
+        logger.info(f"  [Bước 2] Qdrant search collection='vector_raw' (Adaptive Mode) -> "
                      f"trả về {len(search_results)} kết quả, thời gian={search_time:.3f}s")
 
         if search_results:

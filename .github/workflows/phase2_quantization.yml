@@ -1,0 +1,68 @@
+name: Phase 2 - Global Quantization
+
+on:
+  workflow_dispatch:
+    inputs:
+      batch_size:
+        description: 'Batch size for re-quantization'
+        required: false
+        default: '100'
+      sample_size:
+        description: 'Number of vectors to sample for training'
+        required: false
+        default: '20000'
+
+jobs:
+  train:
+    name: Global Training (Consolidated weights)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install numpy qdrant-client supabase faiss-cpu
+
+      - name: Run Global Training
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          QDRANT_CLOUD_URL: ${{ secrets.QDRANT_CLOUD_URL }}
+          QDRANT_CLOUD_API_KEY: ${{ secrets.QDRANT_CLOUD_API_KEY }}
+          SAMPLE_SIZE: ${{ github.event.inputs.sample_size }}
+        run: |
+          python scripts/cloud/global_train.py
+
+  requantize:
+    name: Bulk Re-quantization (Full collection)
+    needs: train
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # Allow up to 6 hours for 200k chunks
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install numpy qdrant-client supabase
+
+      - name: Run Bulk Re-quantization
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          QDRANT_CLOUD_URL: ${{ secrets.QDRANT_CLOUD_URL }}
+          QDRANT_CLOUD_API_KEY: ${{ secrets.QDRANT_CLOUD_API_KEY }}
+          BATCH_SIZE: ${{ github.event.inputs.batch_size }}
+        run: |
+          python scripts/cloud/re_quantize.py
