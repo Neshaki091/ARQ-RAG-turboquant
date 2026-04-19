@@ -1,4 +1,4 @@
-Dưới đây là bộ câu hỏi và ngữ cảnh dài (đúng 10 câu mỗi ngữ cảnh) kèm theo câu trả lời chuẩn được biên soạn từ các tài liệu bạn cung cấp, được thiết kế để đưa vào hệ thống đánh giá RAGAS.
+Dưới đây là bộ câu hỏi và ngữ cảnh dài (đúng 10 câu mỗi ngữ cảnh) kèm theo câu trả lời chuẩn được biên soạn từ các tài liệu bạn cung cấp, được thiết kế để đưa vào hệ thống đánh giá Evaluation.
 
 ---
 

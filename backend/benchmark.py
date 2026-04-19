@@ -102,31 +102,21 @@ class BenchmarkManager:
                 
                 end_ram = self.get_current_ram()
 
-                # Call RAGAS Evaluation với Ground Truth (nếu có)
-                logger.info(f"   [RAGAS] Đang chấm điểm nội bộ cho Q_{actual_idx} ...")
-                scores = {m: 0.0 for m in ["faithfulness", "answer_relevancy", "context_precision", "context_recall", "answer_similarity", "answer_correctness"]}
-                if "contexts" in res and res["answer"]:
-                    scores = chat_service.ragas_evaluator.evaluate(query_text, res["contexts"], res["answer"], ground_truth=ground_truth)
-                
-                # Ghi nhận kết quả
+                # Ghi nhận kết quả theo Schema tiếng Anh chuẩn
                 entry = {
-                    "Model": collection_name,
+                    "model_name": collection_name,
                     "QueryID": actual_idx,
-                    "Query": query_text,
-                    "Latency": res["latency"],
-                    "RAM_Usage": round(end_ram - start_ram, 2),
-                    "Faithfulness": scores.get("faithfulness", 0),
-                    "Answer_Relevance": scores.get("answer_relevance", 0) or scores.get("answer_relevancy", 0),
-                    "Context_Precision": scores.get("context_precision", 0),
-                    "Context_Recall": scores.get("context_recall", 0),
-                    "Answer_Similarity": scores.get("answer_similarity", 0),
-                    "Answer_Correctness": scores.get("answer_correctness", 0),
+                    "question": query_text,
+                    "latency_ms": int(res["latency"] * 1000),
+                    "peak_ram_mb": round(end_ram - start_ram, 2),
+                    "contexts": res.get("contexts", []), # Preserve raw chunks
+                    "ground_truth": ground_truth,
                     "Timestamp": datetime.now().isoformat()
                 }
                 batch_results.append(entry)
-                print(f"   [OK] Q_{actual_idx} | Latency: {res['latency']}s | Scores: {scores}")
+                print(f"   [OK] Q_{actual_idx} | Latency: {entry['latency_ms']}ms | RAM: {entry['peak_ram_mb']}MB")
                 
-                # [MỚI] Delay 30s giữa các câu hỏi để tuân thủ 15 RPM của Google/Groq
+                # Delay 30s giữa các câu hỏi để tuân thủ 15 RPM của Google/Groq
                 if i < len(test_queries) - 1:
                     print(f"   ⏳ Đang chờ 30 giây trước câu hỏi tiếp theo (RPM Safety Mode)...")
                     import asyncio

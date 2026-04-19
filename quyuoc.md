@@ -149,7 +149,7 @@ latency = (time.time() - start) \* 1000
 
 memory = psutil.Process().memory_info().rss / 1024\*\*2
 
-## 5.2 RAGAS Metrics
+## 5.2 Evaluation Metrics
 
 <div class="joplin-table-wrapper"><table><tbody><tr><th><p><strong>Metric</strong></p></th><th><p><strong>Ý nghĩa</strong></p></th><th rowspan="5"><h2>Output chuẩn (JSON)</h2><p>{</p><p>"model": "ARQ-RAG",</p><p>"ram_mb": 780,</p><p>"storage_mb": 110,</p><p>"latency_ms": 52,</p><p>"ragas": {</p><p>"faithfulness": 0.93,</p><p>"answer_relevance": 0.90,</p><p>"context_precision": 0.92,</p><p>"context_recall": 0.88</p><p>}}</p></th></tr><tr><td><p>Faithfulness</p></td><td><p>Không hallucination</p></td></tr><tr><td><p>Answer Relevance</p></td><td><p>Đúng câu hỏi</p></td></tr><tr><td><p>Context Precision</p></td><td><p>Lấy đúng chunk</p></td></tr><tr><td><p>Context Recall</p></td><td><p>Lấy đủ thông tin</p></td></tr></tbody></table></div>
 
@@ -199,7 +199,7 @@ ARQ-RAG (TurboQuant)
 Theo 2 nhóm:
 
 - ⚙️ **System Performance**: RAM, Storage, Latency
-- 🧠 **Quality**: RAGAS
+- 🧠 **Quality**: Evaluation
 
 # 🧠 2. QUY ƯỚC DỮ LIỆU
 
@@ -225,7 +225,7 @@ mỗi Test Set = 50 runs (10 queries x 5 models)
 ## 🔹 Yêu cầu test
 
 - Câu hỏi đa dạng (dễ / trung bình / khó)
-- Có ground truth (để tính RAGAS)
+- Có ground truth (để tính Evaluation)
 - Dùng **cùng bộ câu hỏi cho tất cả model** (Tổng 500 câu)
 
 # ⚙️ 4. QUY TRÌNH CHẠY THỰC NGHIỆM
@@ -237,7 +237,7 @@ FOR mỗi batch (50):
             run query  
             đo latency  
             đo RAM  
-            tính RAGAS (query-level)  
+            tính Evaluation (query-level)  
             lưu kết quả  
             đợi 75s (TPM Safe)
         unload model (giải phóng RAM)
@@ -265,7 +265,7 @@ Từ 20 queries:
 | ----------- | ------------- |
 | Peak RAM    | max(RAM)      |
 | Max Latency | max(latency)  |
-| RAGAS       | trung bình    |
+| Evaluation       | trung bình    |
 
 ## 🔥 5.3 Batch-level (MỚI)
 - 10 queries x 5 models = 50 runs.
@@ -280,7 +280,7 @@ Từ 10 test sets:
 | ----------- | ------------- |
 | Avg RAM     | trung bình    |
 | Avg Latency | trung bình    |
-| Avg RAGAS   | trung bình    |
+| Avg Evaluation   | trung bình    |
 
 # 📦 6. OUTPUT FILE (EXCEL)
 
@@ -320,7 +320,7 @@ Database: Quantized
 - Thay đổi dataset giữa các model
 - Thay đổi embedding
 - Chạy song song (RAM sai)
-- Bỏ qua query-level RAGAS
+- Bỏ qua query-level Evaluation
 
 ## ✅ Bắt buộc
 

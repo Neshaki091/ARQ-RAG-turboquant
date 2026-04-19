@@ -10,7 +10,7 @@ Tài liệu này tổng hợp các luận điểm kĩ thuật quan trọng để
 - **Lý do chọn Gemma (Google):** Đây là dòng mô hình mã nguồn mở mạnh mẽ nhất hiện nay ở phân khúc tầm trung. Sự lựa chọn này chứng minh hệ thống có khả năng chạy tốt trên cả hạ tầng thương mại (Google Cloud) và hạ tầng mở.
 - **Phân bổ nhiệm vụ:**
     - `Gemma 26B`: Sử dụng cho hội thoại (Chat) vì tốc độ phản hồi nhanh.
-    - `Gemma 31B`: Sử dụng làm **Judge LLM (Giám khảo)** cho RAGAS vì khả năng suy luận logic và đánh giá khách quan cao hơn, đảm bảo độ tin cậy cho kết quả nghiên cứu.
+    - `Gemma 31B`: Sử dụng làm **Judge LLM (Giám khảo)** cho Evaluation vì khả năng suy luận logic và đánh giá khách quan cao hơn, đảm bảo độ tin cậy cho kết quả nghiên cứu.
 
 ## 3. Tối ưu hóa API & Hiệu năng (Batching & Determinism)
 - **Batching Generation (5 q/req):** Hệ thống không sinh từng câu hỏi đơn lẻ mà sinh theo lô (Batch). Điều này làm tăng hiệu suất sử dụng API lên 500%, giúp vượt qua các giới hạn về *Requests Per Minute (RPM)* của gói miễn phí mà vẫn xây dựng được bộ dataset 500+ câu hỏi nhanh chóng.
@@ -20,7 +20,7 @@ Tài liệu này tổng hợp các luận điểm kĩ thuật quan trọng để
 - **Independent Inference:** Bản demo trên Hugging Face được đóng gói để tự chạy mô hình Embedding tại chỗ (SentenceTransformers). Điều này chứng minh hệ thống có khả năng triển khai "Inference-only" trên các hạ tầng Cloud giới hạn mà không cần kết nối về máy chủ local.
 - **Automated Data Sync:** Sử dụng dịch vụ Sync tự động qua Docker Compose giúp đảm bảo dữ liệu tại máy phát triển luôn đồng bộ 100% với dữ liệu trên Qdrant Cloud, loại bỏ rủi ro sai lệch dữ liệu khi chuyển đổi môi trường kiểm thử.
 
-## 5. RAGAS Evaluation Strategy
+## 5. Evaluation Evaluation Strategy
 - Hệ thống sử dụng Embedding chuẩn (`nomic-embed-text`) đồng bộ ở mọi giai đoạn (Ingest, RAG, Eval). Tính nhất quán về không gian vector là yếu tố then chốt để các chỉ số như `Faithfulness` và `Answer Relevancy` phản ánh đúng bản chất hiệu quả của thuật toán nén ARQ.
 
 ## 6. Phương pháp luận Đối chứng (Control Group Strategy)

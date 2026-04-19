@@ -19,8 +19,6 @@ services:
         condition: service_started
       ollama:
         condition: service_started
-      qdrant-sync:
-        condition: service_completed_successfully
     deploy:
       resources:
         limits:
@@ -38,6 +36,7 @@ services:
       - ./qdrant_storage:/qdrant/storage
 
   qdrant-sync:
+    profiles: ["manual"]
     build:
       context: ./backend
     container_name: arq_rag_sync

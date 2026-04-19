@@ -22,7 +22,6 @@ Cho đến thời điểm hiện tại, dự án đã đi qua các cột mốc q
 
 ### 3. Hệ thống Đánh giá Tự động (Benchmarking Pipeline)
 - **Pipeline Benchmark quy mô lớn**: Hỗ trợ chạy thử nghiệm trên bộ dữ liệu 1000 câu hỏi.
-- **Tích hợp RAGAS**: Sử dụng Gemini và GPT-OSS để đánh giá các chỉ số học thuật (Faithfulness, Relevancy, etc.).
 - **Xuất báo cáo Excel**: Tự động lưu trữ kết quả và upload lên Supabase Storage để theo dõi lâu dài.
 
 ### 4. Giao diện Nghiên cứu (Research Dashboard)
@@ -56,7 +55,6 @@ Dự án tuân thủ nghiêm ngặt các quy chuẩn để đảm bảo tính kh
 - **Kiến trúc ADC (Asymmetric Distance Computation)**: Chỉ nén Vector trong Database, giữ nguyên định dạng Floating Point cho Vector truy vấn (Query) để đảm bảo độ chính xác.
 - **Quy trình Benchmark**: 
     - Chạy tuần tự từng model để tránh tranh chấp RAM và tài nguyên GPU/LLM.
-    - Đo lường đồng thời 2 nhóm chỉ số: Hiệu năng hệ thống (RAM, Latency) và Chất lượng nội dung (RAGAS).
 - **Tính thống nhất**: 100% các model chạy trên cùng một Dataset, cùng Embedding Model và sử dụng cùng một bộ Query Set để so sánh công bằng.
 - **TurboQuant Definition**: Kết hợp nén Scalar Quantization với kỹ thuật bù sai số QJL (Residual-based) để đạt hiệu năng tương đương vector gốc với dung lượng nén gấp nhiều lần.
 
@@ -110,7 +108,6 @@ Hệ thống tuân thủ nguyên tắc **Asymmetric Distance Computation**:
     - **RAM**: Đo bằng MB (Peak memory usage) qua `psutil`.
     - **Latency**: Đo bằng ms (End-to-end) từ lúc nhận query đến khi trả câu trả lời.
     - **Storage**: Kích thước tệp tin thực tế của Vector Collection.
-- **Chỉ số chất lượng (RAGAS Metrics)**:
     - Faithfulness (Tính trung thực).
     - Answer Relevance (Độ liên quan câu trả lời).
     - Context Precision & Recall (Độ chính xác và đầy đủ của ngữ cảnh).
@@ -132,8 +129,6 @@ Dưới đây là bảng thông số chuẩn được áp dụng cho từng mô 
 *   **LLM Chính (Inference Engine)**: `llama-3.3-70b-versatile`
     *   *Nền tảng*: Groq Cloud API (Tối ưu hóa Latency).
     *   *Nhiệm vụ*: Answer Generation, Query Analysis.
-*   **LLM Giám khảo (RAGAS Judge)**: `llama-3.3-70b-versatile`
-    *   *Nhiệm vụ*: Chấm điểm Faithfulness, Answer Relevancy, v.v.
 *   **Embedding Model**: `nomic-embed-text-v1.5`
     *   *Nền tảng*: Ollama Local (Hỗ trợ context length lên tới 8192).
 *   **Tham số Generation**: `temperature = 0` (Đảm bảo kết quả benchmark có tính lặp lại tốt).

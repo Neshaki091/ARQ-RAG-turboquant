@@ -190,13 +190,13 @@ FOR mỗi model:
             run query
             đo latency
             đo RAM (psutil + process tree)
-            tính RAGAS (query-level)
+            tính Evaluation (query-level)
             log
 
         tính:
             peak RAM
             max latency
-            avg RAGAS
+            avg Evaluation
 
     stop container
 ```
@@ -223,7 +223,7 @@ FOR mỗi model:
 ```text
 - Peak RAM
 - Max latency
-- Avg RAGAS
+- Avg Evaluation
 ```
 
 ---
@@ -233,12 +233,12 @@ FOR mỗi model:
 ```text
 - Avg RAM
 - Avg latency
-- Avg RAGAS
+- Avg Evaluation
 ```
 
 ---
 
-# 🧠 9. RAGAS (MOCK)
+# 🧠 9. Evaluation (MOCK)
 
 ```text
 faithfulness = cosine similarity

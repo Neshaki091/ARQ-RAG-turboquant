@@ -11,14 +11,11 @@ python-multipart
 python-dotenv
 httpx
 PyMuPDF
-ragas
-deepeval
-trulens-eval
 google-genai
 langchain
 langchain-community
 langchain-core
 langchain-ollama
 langchain-groq
-datasets
 langchain-google-genai
+tqdm

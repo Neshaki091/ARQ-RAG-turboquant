@@ -38,17 +38,23 @@ def sync():
             try:
                 local_client.get_collection(coll_name)
             except:
-                logger.info(f"   🆕 Tạo mới collection {coll_name} ở local...")
-                vector_size = 768 # Mặc định cho nomic-embed-text
+                logger.info(f"   🆕 Tạo mới collection {coll_name} ở local (copy config từ cloud)...")
+                
+                # Lấy cấu hình đầy đủ từ Cloud để đồng bộ hoàn toàn (Quantization, HNSW, ...)
+                cloud_config = cloud_client.get_collection(coll_name).config
+                
                 local_client.create_collection(
                     collection_name=coll_name,
-                    vectors_config=models.VectorParams(size=vector_size, distance=models.Distance.COSINE)
+                    vectors_config=cloud_config.params.vectors,
+                    quantization_config=cloud_config.quantization_config,
+                    hnsw_config=cloud_config.hnsw_config,
+                    optimizers_config=cloud_config.optimizers_config
                 )
 
             # Cuộn (Scroll) dữ liệu từ Cloud và Upsert vào Local
             offset = None
             total_synced = 0
-            batch_size = 500
+            batch_size = 200 # Giảm batch size để tăng độ ổn định cho local
             
             while True:
                 response = cloud_client.scroll(
@@ -58,18 +64,27 @@ def sync():
                     with_vectors=True,
                     offset=offset
                 )
-                points, next_offset = response
+                records, next_offset = response
                 
-                if not points:
+                if not records:
                     break
+                
+                # CHỈNH SỬA: Chuyển đổi Record sang PointStruct để tránh lỗi Validation 500
+                converted_points = [
+                    models.PointStruct(
+                        id=r.id,
+                        vector=r.vector,
+                        payload=r.payload
+                    ) for r in records
+                ]
                 
                 # Upsert vào local
                 local_client.upsert(
                     collection_name=coll_name,
-                    points=points
+                    points=converted_points
                 )
                 
-                total_synced += len(points)
+                total_synced += len(records)
                 offset = next_offset
                 logger.info(f"   ✅ Đã sync {total_synced}/{cloud_info.points_count} points cho {coll_name}...")
                 

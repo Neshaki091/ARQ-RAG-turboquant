@@ -10,7 +10,6 @@ logger = logging.getLogger("ChatService")
 # Shared Imports
 from shared.embed import EmbeddingManager
 from shared.vector_store import VectorStoreManager
-from shared.evaluation_center import AdvancedEvaluator
 from shared.query_analyzer import QueryAnalyzer
 import psutil
 
@@ -30,7 +29,6 @@ class ChatService:
     def __init__(self):
         self.embed_manager = EmbeddingManager()
         self.vector_manager = VectorStoreManager()
-        self.advanced_evaluator = AdvancedEvaluator()
         self.query_analyzer = QueryAnalyzer()
         self.process = psutil.Process() # Theo dõi tiến trình hiện tại
         

@@ -91,17 +91,15 @@ class SuperBenchmarkRunner:
                 response.raise_for_status()
                 result = response.json()
                 
-                # 3. Lưu kết quả vào bảng 'benchmarks'
+                # 3. Lưu kết quả vào bảng 'benchmarks' - Chỉ giữ lại dữ liệu thô và hiệu năng
                 self.sm.supabase.table("benchmarks").insert({
                     "model_name": model_label,
                     "question": query,
                     "answer": result["answer"],
-                    "contexts": result["contexts"],
+                    "contexts": result["contexts"], # Lưu bối cảnh thô để chấm điểm offline sau
                     "ground_truth": ground_truth,
                     "latency_ms": result["latency_ms"],
-                    "peak_ram_mb": result["peak_ram_mb"],
-                    "total_ram_mb": result["total_ram_mb"],
-                    "cpu_percent": result.get("cpu_percent", 0),
+                    "peak_ram_mb": result.get("peak_ram_mb", 0),
                     "topic": topic
                 }).execute()
                 
