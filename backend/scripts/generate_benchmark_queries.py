@@ -55,7 +55,7 @@ class CloudBenchmarkGenerator:
                        "generate EXACTLY 5 high-quality, distinct technical questions and their precise ground truth answers. "
                        "Each question must be challenging and technical. "
                        "Format your response as a valid JSON array of objects: "
-                       '[{"question": "Q1...", "ground_truth": "A1..."}, {"question": "Q2...", "ground_truth": "A2..."}, ...]'),
+                       '[ {{"question": "Q1...", "ground_truth": "A1..."}}, {{"question": "Q2...", "ground_truth": "A2..."}}, ... ]'),
             ("human", "Topic: {topic}\n\nContext Chunks:\n{context}")
         ])
         
