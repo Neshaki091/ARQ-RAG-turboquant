@@ -215,7 +215,7 @@ class SupabaseManager:
         """Lấy danh sách câu hỏi ground_truth từ Supabase."""
         if not self.supabase: return []
         try:
-            res = self.supabase.table("benchmark_queries").select("question, ground_truth, topic, source_files").execute()
+            res = self.supabase.table("benchmark_queries").select("_id, question, ground_truth, topic, source_files").execute()
             return res.data if res.data else []
         except Exception as e:
             logger.error(f"Lỗi khi đọc benchmark_queries: {e}")

@@ -229,15 +229,35 @@ async def run_benchmark_ui(req: BenchmarkRequest, background_tasks: BackgroundTa
     state["benchmark_model"] = req.model
     state["progress"] = 0
     def process():
+        PROGRESS_FILE = "backend/data/benchmark_progress.json"
+        
+        # Load progress file (tạo mới nếu chưa có)
+        try:
+            os.makedirs("backend/data", exist_ok=True)
+            if os.path.exists(PROGRESS_FILE):
+                with open(PROGRESS_FILE, "r") as f:
+                    progress_data = json.load(f)
+            else:
+                progress_data = {}
+        except Exception:
+            progress_data = {}
+
+        done_ids = set(progress_data.get(req.model, []))
+        print(f"[Benchmark] Model={req.model} | Đã chạy: {len(done_ids)} câu | File: {PROGRESS_FILE}")
+
         try:
             sm = SupabaseManager()
             queries = sm.get_benchmark_queries()
             if not queries: raise Exception("Không tìm thấy đề thi.")
-            test_subset = queries[:req.batch_size]
+
+            # Lọc bỏ câu đã chạy (dùng _id)
+            remaining = [q for q in queries if q.get("_id") not in done_ids]
+            test_subset = remaining[:req.batch_size]
+            print(f"[Benchmark] Tổng={len(queries)} | Còn lại={len(remaining)} | Batch={len(test_subset)}")
+
             for i, q in enumerate(test_subset):
                 if not state["benchmark_running"]: break
                 
-                # Không dùng try-except ẩn ở đây để đảm bảo nếu lỗi sẽ dừng mẻ và báo cáo ngay
                 with httpx.Client(timeout=180.0) as client:
                     resp = client.post("http://localhost:8000/api/benchmark/query", 
                                      json={"query": q["question"], "collection": req.model})
@@ -246,10 +266,8 @@ async def run_benchmark_ui(req: BenchmarkRequest, background_tasks: BackgroundTa
                         raise Exception(f"Benchmark Failed: Query '{q['question'][:50]}...' trả về lỗi {resp.status_code}")
                         
                     res = resp.json()
-                    # Đảm bảo contexts là JSON-serializable (list of strings)
-                    contexts_val = res.get("contexts", [])
-                    if isinstance(contexts_val, list):
-                        contexts_val = json.dumps(contexts_val)
+                    raw_ctx = res.get("contexts", [])
+                    contexts_val = [c[:500] for c in raw_ctx[:3]] if isinstance(raw_ctx, list) else []
 
                     try:
                         sm.supabase.table("benchmarks").insert({
@@ -266,9 +284,17 @@ async def run_benchmark_ui(req: BenchmarkRequest, background_tasks: BackgroundTa
                             "rerank_latency_ms": res.get("rerank_latency_ms", 0),
                             "topic": q.get("topic", "General")
                         }).execute()
+
+                        # Ghi _id vào progress file sau khi insert thành công
+                        q_id = q.get("_id")
+                        if q_id is not None:
+                            done_ids.add(q_id)
+                            progress_data[req.model] = list(done_ids)
+                            with open(PROGRESS_FILE, "w") as f:
+                                json.dump(progress_data, f, indent=2)
+
                     except Exception as db_err:
-                        import traceback
-                        print(f"[Benchmark Insert Error] {db_err}\nFields: answer_len={len(res.get('answer',''))}, contexts_type={type(contexts_val)}")
+                        print(f"[Benchmark Insert Error] {db_err}\nFields: answer_len={len(res.get('answer',''))}, contexts_count={len(contexts_val)}")
                         raise
 
                 state["progress"] = int(((i+1)/len(test_subset))*100)
@@ -280,6 +306,7 @@ async def run_benchmark_ui(req: BenchmarkRequest, background_tasks: BackgroundTa
             state["benchmark_running"] = False
     background_tasks.add_task(process)
     return {"message": "Bắt đầu benchmark..."}
+
 
 @app.get("/api/benchmark/history")
 async def get_benchmark_history(model: str = "all"):
