@@ -2,126 +2,114 @@ import os
 import json
 import logging
 import time
+import asyncio
 from typing import List, Dict
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+
+# DeepEval & TruLens Imports
+from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric
+from deepeval.test_case import LLMTestCase
+from deepeval.models.gemini_model import GeminiModel
+
 from shared.supabase_client import SupabaseManager
 
 load_dotenv()
 
 # Cấu hình Logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("BatchEval")
+logger = logging.getLogger("AdvancedBatchEval")
+
+class KeyRotator:
+    def __init__(self, keys: List[str]):
+        self.keys = [k for k in keys if k]
+        self.index = 0
+    def get_next_key(self):
+        if not self.keys: return None
+        key = self.keys[self.index]
+        self.index = (self.index + 1) % len(self.keys)
+        return key
 
 class BatchEvaluator:
     def __init__(self):
-        self.api_key = os.getenv("GOOGLE_API_KEY")
-        self.client = genai.Client(api_key=self.api_key)
+        # Lấy các Keys từ môi trường và lọc bỏ các giá trị None/rỗng
+        raw_keys = [os.getenv("GOOGLE_API_KEY"), os.getenv("GOOGLE_API_KEY_2")]
+        valid_keys = [str(k) for k in raw_keys if k and isinstance(k, str)]
+        
+        self.rotator = KeyRotator(valid_keys)
         self.sm = SupabaseManager()
-        self.model_name = "gemini-1.5-flash"
-
-    def _build_prompt(self, cases: List[Dict]) -> str:
-        prompt = """Bạn là một chuyên gia đánh giá hệ thống RAG. Nhiệm vụ của bạn là chấm điểm các cặp (Câu hỏi, Ngữ cảnh, Câu trả lời) dựa trên tiêu chí:
-1. Faithfulness (0.0 - 1.0): Câu trả lời có trung thực và bám sát ngữ cảnh không?
-2. Answer Relevancy (0.0 - 1.0): Câu trả lời có đúng trọng tâm câu hỏi không?
-
-Dữ liệu đầu vào là danh sách các Case. Hãy trả về kết quả dưới dạng JSON ARRAY.
-Mỗi phần tử trong Array phải có định dạng: 
-{"case_index": int, "faithfulness": float, "answer_relevancy": float, "reasoning": "giải thích ngắn bằng tiếng Việt"}
-
-DANH SÁCH CÁC CASE CẦN CHẤM:
-"""
-        for i, case in enumerate(cases):
-            prompt += f"\n--- CASE {i} ---\n"
-            prompt += f"CÂU HỎI: {case['question']}\n"
-            prompt += f"NGỮ CẢNH: {case['contexts']}\n"
-            prompt += f"CÂU TRẢ LỜI: {case['answer']}\n"
+        # Nâng cấp lên Gemini 3.1 Flash Lite làm Judge chuẩn
+        self.model_name = "gemini-3.1-flash-lite-preview"
         
-        return prompt
+        # Khởi tạo Judge LLM cho DeepEval
+        os.environ["GOOGLE_API_KEY"] = self.rotator.get_next_key() # Key khởi tạo
+        self.judge_llm = GeminiModel(model_name=self.model_name)
+        
+        # Thiết lập các Metrics
+        self.faithfulness_metric = FaithfulnessMetric(threshold=0.5, model=self.judge_llm)
+        self.relevancy_metric = AnswerRelevancyMetric(threshold=0.5, model=self.judge_llm)
 
-    def evaluate_batch(self, cases: List[Dict]) -> List[Dict]:
-        """Gửi 1 lô câu hỏi sang Gemini và nhận kết quả JSON"""
-        if not cases:
-            return []
-
-        prompt = self._build_prompt(cases)
+    def evaluate_single_case(self, question: str, answer: str, contexts: List[str]) -> Dict:
+        """Chấm điểm 1 câu duy nhất bằng DeepEval Metrics chuyên sâu"""
+        test_case = LLMTestCase(
+            input=question,
+            actual_output=answer,
+            retrieval_context=contexts
+        )
+        
+        # Xoay tua Key trước mỗi lượt chấm để tăng độ ổn định
+        os.environ["GOOGLE_API_KEY"] = self.rotator.get_next_key()
         
         try:
-            logger.info(f"🚀 Đang gửi Batch ({len(cases)} cases) sang {self.model_name}...")
+            self.faithfulness_metric.measure(test_case)
+            self.relevancy_metric.measure(test_case)
             
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    temperature=0
-                )
-            )
-            
-            # Parse kết quả JSON
-            results = json.loads(response.text)
-            
-            # Nếu kết quả là một object chứa list, hãy bóc tách
-            if isinstance(results, dict) and "results" in results:
-                results = results["results"]
-            
-            logger.info(f"✅ Đã nhận kết quả cho {len(results)} cases.")
-            return results
+            return {
+                "faithfulness": self.faithfulness_metric.score,
+                "answer_relevance": self.relevancy_metric.score,
+                "reasoning": f"F: {self.faithfulness_metric.reason} | R: {self.relevancy_metric.reason}"
+            }
         except Exception as e:
-            logger.error(f"❌ Lỗi khi chấm điểm Batch: {e}")
-            return []
+            logger.error(f"❌ Lỗi chấm điểm DeepEval: {e}")
+            return {"faithfulness": 0.0, "answer_relevance": 0.0, "reasoning": str(e)}
 
-    def run_benchmark_eval(self, limit=500, batch_size=25):
-        """Quét Supabase và chấm điểm cho các dòng chưa có điểm"""
-        # 1. Lấy dữ liệu chưa có điểm từ Supabase
-        # Giả định bảng là 'benchmarks' và query lọc các dòng có faithfulness IS NULL
+    def run_benchmark_eval(self, limit=100):
+        """Quét bảng 'benchmarks' và chấm điểm cho các dòng còn thiếu"""
         try:
-            # Sửa từ self.sm.client thành self.sm.supabase
+            # 1. Lấy dữ liệu chưa có điểm
             query = self.sm.supabase.table("benchmarks").select("*").is_("faithfulness", "null").limit(limit)
             records = query.execute().data
             
             if not records:
-                logger.info("🎉 Không còn dòng nào cần chấm điểm.")
+                logger.info("🎉 Không còn dữ liệu nào cần chấm điểm.")
                 return
 
-            logger.info(f"📊 Tìm thấy {len(records)} dòng cần đánh giá. Bắt đầu chia Batch...")
+            logger.info(f"📊 Đang bắt đầu chấm điểm Nâng cao (DeepEval) cho {len(records)} dòng...")
 
-            # 2. Chia Batch và chấm điểm
-            for i in range(0, len(records), batch_size):
-                batch = records[i:i + batch_size]
-                cases = []
-                for r in batch:
-                    # Đảm bảo lấy đúng tên cột (query/question, context)
-                    q_text = r.get("query") or r.get("question")
-                    c_text = r.get("context") or ""
-                    a_text = r.get("answer") or ""
-                    
-                    cases.append({
-                        "question": q_text,
-                        "contexts": str(c_text)[:8000], # Tối ưu context
-                        "answer": a_text
-                    })
+            for i, r in enumerate(records):
+                # Chuẩn bị dữ liệu
+                q_text = r.get("question") or ""
+                a_text = r.get("answer") or ""
+                c_list = r.get("contexts") or []
                 
-                scores = self.evaluate_batch(cases)
+                logger.info(f"  [{i+1}/{len(records)}] Đang chấm: {q_text[:30]}...")
                 
-                # 3. Cập nhật kết quả vào Supabase
-                if scores:
-                    for j, score in enumerate(scores):
-                        if j < len(batch):
-                            record_id = batch[j]["id"]
-                            self.sm.supabase.table("benchmarks").update({
-                                "faithfulness": score.get("faithfulness", 0.0),
-                                "answer_relevance": score.get("answer_relevancy", 0.0),
-                            }).eq("id", record_id).execute()
+                # Chấm điểm
+                scores = self.evaluate_single_case(q_text, a_text, c_list)
                 
-                logger.info(f"✨ Đã hoàn thành và cập nhật Batch {i//batch_size + 1}")
-                time.sleep(1) # Nghỉ ngắn
+                # Cập nhật kết quả vào Supabase
+                self.sm.supabase.table("benchmarks").update({
+                    "faithfulness": scores["faithfulness"],
+                    "answer_relevance": scores["answer_relevance"]
+                }).eq("id", r["id"]).execute()
+                
+                # Sleep nhẹ để tránh rate limit
+                time.sleep(1)
+
+            logger.info(f"✅ Đã hoàn thành chấm điểm DeepEval cho {len(records)} dòng.")
 
         except Exception as e:
             logger.error(f"❌ Lỗi trong quy trình Benchmark: {e}")
 
 if __name__ == "__main__":
     evaluator = BatchEvaluator()
-    # evaluator.run_benchmark_eval(limit=50, batch_size=10)
-    print("Sẵn sàng chạy Batch Evaluator. Hãy gọi run_benchmark_eval() để bắt đầu.")
+    # evaluator.run_benchmark_eval(limit=10) # Để chạy thử

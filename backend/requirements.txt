@@ -12,6 +12,9 @@ python-dotenv
 httpx
 PyMuPDF
 ragas
+deepeval
+trulens-eval
+google-genai
 langchain
 langchain-community
 langchain-core

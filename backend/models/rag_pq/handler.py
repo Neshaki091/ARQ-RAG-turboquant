@@ -15,6 +15,36 @@ class ModelHandler:
         self.vm = VectorStoreManager()
         self.pq = ManualPQ(d=768, m=32, nbits=8) # Dimension fixed for now
 
+        # 1. Load Global Weights (New Unified Method with Auto-Download)
+        import pickle
+        weights_dir = "backend/data"
+        weights_path = os.path.join(weights_dir, "model_weights.pkl")
+        
+        # Tự động tải từ Cloud nếu chưa có local
+        if not os.path.exists(weights_path):
+            logger.info(f"[RAG-PQ] File {weights_path} không tồn tại. Đang tự động tải từ Supabase...")
+            try:
+                from shared.supabase_client import SupabaseManager
+                sm = SupabaseManager()
+                os.makedirs(weights_dir, exist_ok=True)
+                sm.download_file("centroids", "model_weights.pkl", weights_path)
+                logger.info("[RAG-PQ] ✅ Đã tải thành công model_weights.pkl từ bucket 'centroids'")
+            except Exception as de:
+                logger.error(f"[RAG-PQ] ❌ Không thể tự động tải weights: {de}")
+
+        if os.path.exists(weights_path):
+            try:
+                with open(weights_path, "rb") as f:
+                    weights = pickle.load(f)
+                
+                # Load PQ weights
+                pq_weights = weights.get("pq", {})
+                if pq_weights:
+                    self.pq.centroids = pq_weights.get("centroids", self.pq.centroids)
+                    logger.info(f"[RAG-PQ] Đã load GLOBAL weights từ {weights_path}")
+            except Exception as e:
+                logger.error(f"[RAG-PQ] Lỗi khi load global weights: {e}")
+
     async def handle(self, query, model_name, limit, top_k):
         logger.info("=" * 60)
         logger.info("[RAG-PQ] BẮT ĐẦU TÌM KIẾM CHUNK")

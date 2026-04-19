@@ -106,8 +106,8 @@ def main():
     if S_URL and S_KEY:
         try:
             supabase = CloudSupabase(S_URL, S_KEY)
-            logger.info("Downloading latest weights from Supabase ('models' bucket)...")
-            supabase.download_file("models", "model_weights.pkl", weights_path)
+            logger.info("Downloading latest weights from Supabase ('centroids' bucket)...")
+            supabase.download_file("centroids", "model_weights.pkl", weights_path)
             logger.info("✅ SUCCESS: Latest weights downloaded.")
         except Exception as e:
             logger.warning(f"Could not download weights from Supabase: {e}. Checking local...")

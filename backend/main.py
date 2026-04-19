@@ -321,6 +321,69 @@ async def chat_stream(req: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+class BenchmarkQueryRequest(BaseModel):
+    query: str
+    model: str = "gemma-4-26b-it"
+    collection: str = "vector_arq"
+    google_api_key: str = None
+
+@app.post("/api/benchmark/query")
+async def benchmark_query(req: BenchmarkQueryRequest):
+    """
+    Endpoint chuyên dụng cho thực nghiệm phòng thí nghiệm.
+    Đo lường chính xác RAM và Latency của tiến trình Docker.
+    """
+    import os
+    import time
+    import psutil
+    from chat_service import ChatService
+    
+    # 1. Đo RAM trước khi xử lý
+    process = psutil.Process(os.getpid())
+    start_mem = process.memory_info().rss / (1024 * 1024)
+    start_time = time.time()
+    
+    # 2. Tạm thời nạp API Key được chỉ định cho yêu cầu này (Xoay tua)
+    original_key = os.getenv("GOOGLE_API_KEY")
+    if req.google_api_key:
+        os.environ["GOOGLE_API_KEY"] = req.google_api_key
+    
+    try:
+        cs = ChatService()
+        # Chuyển đổi stream thành phản hồi đầy đủ
+        full_answer = ""
+        contexts = []
+        
+        async for chunk in cs.chat_stream(req.query, "google", req.collection):
+            data = json.loads(chunk)
+            if data["type"] == "text":
+                full_answer += data["content"]
+            elif data["type"] == "context":
+                contexts = data["content"]
+        
+        # 3. Đo RAM sau khi xử lý & Latency
+        end_time = time.time()
+        end_mem = process.memory_info().rss / (1024 * 1024)
+        peak_ram = max(0, end_mem - start_mem)
+        latency = (end_time - start_time) * 1000
+        
+        return {
+            "answer": full_answer,
+            "contexts": contexts,
+            "latency_ms": round(latency, 2),
+            "peak_ram_mb": round(peak_ram, 2),
+            "total_ram_mb": round(end_mem, 2),
+            "cpu_percent": psutil.cpu_percent()
+        }
+        
+    except Exception as e:
+        logger.error(f"Benchmark Query Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        # Khôi phục Key ban đầu
+        if original_key:
+            os.environ["GOOGLE_API_KEY"] = original_key
+
 @app.post("/run-auto-pipeline")
 async def run_auto_pipeline(req: IngestRequest, background_tasks: BackgroundTasks):
     if state["status"] not in ["IDLE", "COMPLETED"]:

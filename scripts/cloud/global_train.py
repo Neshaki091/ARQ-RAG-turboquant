@@ -163,8 +163,8 @@ def main():
     if S_URL and S_KEY:
         try:
             supabase = CloudSupabase(S_URL, S_KEY)
-            logger.info("Uploading weights to Supabase Storage ('models' bucket)...")
-            supabase.upload_file("models", weights_path, "model_weights.pkl")
+            logger.info("Uploading weights to Supabase Storage ('centroids' bucket)...")
+            supabase.upload_file("centroids", weights_path, "model_weights.pkl")
             logger.info("✅ SUCCESS: Global weights uploaded to Cloud Storage.")
         except Exception as e:
             logger.error(f"Failed to upload weights: {e}")

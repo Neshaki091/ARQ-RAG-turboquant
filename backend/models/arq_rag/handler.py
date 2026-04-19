@@ -17,8 +17,22 @@ class ModelHandler:
         # Initializing TurboQuant directly in the handler for "ownership"
         self.tq = TurboQuantProd(d=768, b=4)
         
-        # 1. Load Global Weights (New Unified Method)
-        weights_path = "backend/data/model_weights.pkl"
+        # 1. Load Global Weights (New Unified Method with Auto-Download)
+        weights_dir = "backend/data"
+        weights_path = os.path.join(weights_dir, "model_weights.pkl")
+        
+        # Tự động tải từ Cloud nếu chưa có local
+        if not os.path.exists(weights_path):
+            logger.info(f"[ARQ-RAG] File {weights_path} không tồn tại. Đang tự động tải từ Supabase...")
+            try:
+                from shared.supabase_client import SupabaseManager
+                sm = SupabaseManager()
+                os.makedirs(weights_dir, exist_ok=True)
+                sm.download_file("centroids", "model_weights.pkl", weights_path)
+                logger.info("[ARQ-RAG] ✅ Đã tải thành công model_weights.pkl từ bucket 'centroids'")
+            except Exception as de:
+                logger.error(f"[ARQ-RAG] ❌ Không thể tự động tải weights: {de}")
+
         if os.path.exists(weights_path):
             try:
                 with open(weights_path, "rb") as f:

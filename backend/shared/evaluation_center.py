@@ -5,14 +5,33 @@ import json
 from typing import List, Dict, Optional
 from dotenv import load_dotenv
 
-# DeepEval imports
-from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric
-from deepeval.test_case import LLMTestCase
-from deepeval.models.base_model import DeepEvalBaseLLM
+try:
+    # DeepEval imports
+    from deepeval.metrics import FaithfulnessMetric, AnswerRelevancyMetric
+    from deepeval.test_case import LLMTestCase
+    from deepeval.models.base_model import DeepEvalBaseLLM
+    HAS_DEEPEVAL = True
+except ImportError:
+    HAS_DEEPEVAL = False
+    # Mock classes for linting and safety
+    class LLMTestCase: pass
+    class DeepEvalBaseLLM: pass
+    class FaithfulnessMetric: pass
+    class AnswerRelevancyMetric: pass
 
-# TruLens imports
-from trulens_eval import Tru, Feedback, Select
-from trulens_eval.feedback.provider.ollama import Ollama as OllamaProvider
+try:
+    # TruLens imports
+    from trulens_eval import Tru, Feedback, Select
+    from trulens_eval.feedback.provider.ollama import Ollama as OllamaProvider
+    HAS_TRULENS = True
+except ImportError:
+    HAS_TRULENS = False
+    # Mock classes for linting and safety
+    class Tru: pass
+    class Feedback: pass
+    class Select: pass
+    class OllamaProvider: pass
+
 import numpy as np
 
 load_dotenv()
