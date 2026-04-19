@@ -4,118 +4,18 @@ import logging
 import httpx
 import numpy as np
 import fitz  # PyMuPDF
-import faiss
 from supabase import create_client, Client
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 import uuid
+import argparse
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(name)s | %(levelname)s | %(message)s')
 logger = logging.getLogger("CloudIngest")
 
-# --- Simplified Quantization Models (Ported for Standalone) ---
+# --- Cloud Context Managers ---
 
-class TurboQuantMSE:
-    def __init__(self, d, b, random_state=None):
-        self.d = d
-        self.b = b
-        self.num_centroids = 2 ** b
-        if random_state is None:
-            random_state = np.random.RandomState(42)
-        H = random_state.randn(d, d)
-        Q, _ = np.linalg.qr(H)
-        self.Pi = Q 
-        self.centroids = np.zeros(self.num_centroids)
-
-    def quantize_batch(self, X):
-        Y = np.dot(X, self.Pi.T)
-        diffs = np.abs(Y[:, :, np.newaxis] - self.centroids[np.newaxis, np.newaxis, :])
-        idx = np.argmin(diffs, axis=2)
-        return idx
-
-    def dequantize_batch(self, idx):
-        Y_tilde = self.centroids[idx]
-        X_tilde = np.dot(Y_tilde, self.Pi)
-        return X_tilde
-
-class TurboQuantProd:
-    def __init__(self, d, b, random_state=None):
-        self.d = d
-        self.b = b
-        if random_state is None:
-            random_state = np.random.RandomState(42)
-        self.tq_mse = TurboQuantMSE(d, b - 1, random_state=random_state)
-        self.S = random_state.randn(d, d)
-        self.alpha = np.sqrt(np.pi / 2.0) / d
-
-    def quantize_batch(self, X):
-        idx = self.tq_mse.quantize_batch(X)
-        X_tilde_mse = self.tq_mse.dequantize_batch(idx)
-        R = X - X_tilde_mse
-        gamma = np.linalg.norm(R, axis=1, ord=2) 
-        TR = np.dot(R, self.S.T)
-        qjl = np.sign(TR).astype(np.int8)
-        qjl[qjl == 0] = 1 
-        return idx, qjl, gamma
-
-class ManualPQ:
-    def __init__(self, d, m, nbits=8):
-        self.d = d
-        self.m = m
-        self.nbits = nbits
-        self.k = 2 ** nbits
-        self.ds = d // m
-        self.centroids = []
-
-    def train(self, X):
-        X = X.astype('float32')
-        n_data = X.shape[0]
-        k_actual = min(self.k, n_data)
-        if k_actual < 1: return
-        self.centroids = []
-        for i in range(self.m):
-            sub_X = X[:, i*self.ds : (i+1)*self.ds]
-            if n_data >= k_actual and k_actual >= 2:
-                kmeans = faiss.Kmeans(d=self.ds, k=k_actual, niter=20, verbose=False)
-                kmeans.train(sub_X)
-                self.centroids.append(kmeans.centroids)
-            else:
-                padding = np.zeros((max(0, k_actual - n_data), self.ds), dtype='float32')
-                fallback_centroids = np.vstack([sub_X, padding]) if n_data > 0 else np.zeros((k_actual, self.ds), dtype='float32')
-                self.centroids.append(fallback_centroids)
-
-    def quantize(self, X):
-        N = X.shape[0]
-        codes = np.zeros((N, self.m), dtype=np.uint8)
-        for i in range(self.m):
-            sub_X = X[:, i*self.ds : (i+1)*self.ds]
-            diffs = np.linalg.norm(sub_X[:, np.newaxis, :] - self.centroids[i][np.newaxis, :, :], axis=2)
-            codes[:, i] = np.argmin(diffs, axis=1)
-        return codes
-
-class ManualSQ8:
-    def __init__(self, d):
-        self.d = d
-        self.min_val = None
-        self.max_val = None
-
-    def train(self, X):
-        if X.shape[0] == 0:
-            self.min_val = np.zeros(self.d)
-            self.max_val = np.ones(self.d)
-            return
-        self.min_val = np.min(X, axis=0)
-        self.max_val = np.max(X, axis=0)
-        diff = self.max_val - self.min_val
-        diff[diff == 0] = 1e-10
-        self.max_val = self.min_val + diff
-
-    def quantize(self, X):
-        X_scaled = (X - self.min_val) / (self.max_val - self.min_val)
-        return (X_scaled * 255).astype(np.uint8)
-
-# --- Managers for Cloud Context ---
 
 class CloudSupabase:
     def __init__(self, url, key):
@@ -233,6 +133,12 @@ def chunk_text(text, chunk_size=400, overlap=50):
     return chunks
 
 def main():
+    parser = argparse.ArgumentParser(description="Cloud Ingestion Script with Partitioning Support")
+    parser.add_argument("--total_parts", type=int, default=1, help="Total number of partitions (runners)")
+    parser.add_argument("--part_index", type=int, default=0, help="Index of the current partition (0-indexed)")
+    parser.add_argument("--limit", type=int, default=0, help="Max papers to process in this runner (0 for all)")
+    args = parser.parse_args()
+
     # Load Env
     S_URL = os.getenv("SUPABASE_URL")
     S_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -251,13 +157,21 @@ def main():
     if PURGE:
         logger.info("Purge mode detected. Resetting all paper statuses to false...")
         supabase.reset_all_paper_status()
-        # Optionally delete collections from Qdrant Cloud too?
-        # For safety, let's just reset metadata status.
 
-    papers = supabase.get_pending_papers()
-    if not papers:
+    all_papers = supabase.get_pending_papers()
+    if not all_papers:
         logger.info("No pending papers to embed.")
         return
+
+    # Partitioning Logic
+    logger.info(f"Total pending papers: {len(all_papers)}")
+    papers = all_papers[args.part_index::args.total_parts]
+    
+    if args.limit > 0:
+        papers = papers[:args.limit]
+        
+    logger.info(f"Runner {args.part_index}/{args.total_parts} assigned {len(papers)} papers.")
+
 
     logger.info("Fetching actual file list from bucket...")
     actual_files = supabase.list_files("papers")
@@ -306,51 +220,10 @@ def main():
             vector_store.upsert("vector_raw", chunks, embeddings)
             logger.info("   - RAW collection updated (Standard & Adaptive).")
 
-            # 3. SQ8
-            sq8 = ManualSQ8(d=768)
-            sq8.train(emb_array)
-            codes_sq8 = sq8.quantize(emb_array)
-            vector_store.ensure_collection("vector_sq8", quantization=models.ScalarQuantization(
-                scalar=models.ScalarQuantizationConfig(type=models.ScalarType.INT8, always_ram=True)
-            ))
-            vector_store.upsert("vector_sq8", chunks, embeddings, extra_payloads=[{"codes": c.tolist()} for c in codes_sq8])
-            logger.info("   - SQ8 collection updated.")
 
-            # 4. PQ
-            pq = ManualPQ(d=768, m=32, nbits=8)
-            pq.train(emb_array)
-            codes_pq = pq.quantize(emb_array)
-            vector_store.ensure_collection("vector_pq", quantization=models.ProductQuantization(
-                product=models.ProductQuantizationConfig(compression=models.CompressionRatio.X32, always_ram=True)
-            ))
-            vector_store.upsert("vector_pq", chunks, embeddings, extra_payloads=[{"codes": c.tolist()} for c in codes_pq])
-            logger.info("   - PQ collection updated.")
-
-            # 5. ARQ (TurboQuant)
-            tq_prod = TurboQuantProd(d=768, b=4)
-            # Training centroids in cloud might be simplified or skipped if not many points
-            # But let's try a simple version
-            Y = np.dot(emb_array, tq_prod.tq_mse.Pi.T)
-            y_flat = Y.flatten().reshape(-1, 1)
-            km = faiss.Kmeans(d=1, k=8, niter=20)
-            km.train(y_flat)
-            tq_prod.tq_mse.centroids = np.sort(km.centroids.flatten())
-            
-            idx, qjl, gamma = tq_prod.quantize_batch(emb_array)
-            extra_arq = []
-            for i in range(len(embeddings)):
-                extra_arq.append({
-                    "idx": idx[i].tolist(),
-                    "qjl": qjl[i].tolist(),
-                    "gamma": float(gamma[i]),
-                    "orig_norm": float(np.linalg.norm(emb_array[i]))
-                })
-            
-            vector_store.ensure_collection("vector_arq", quantization=models.ScalarQuantization(
-                scalar=models.ScalarQuantizationConfig(type=models.ScalarType.INT8, always_ram=True)
-            ))
-            vector_store.upsert("vector_arq", chunks, embeddings, extra_payloads=extra_arq)
-            logger.info("   - ARQ collection updated.")
+            # NOTE: SQ8, PQ, and ARQ ingestion is disabled here to avoid fragmented training.
+            # These collections will be populated via a global re-quantization script
+            # after enough raw data has been collected.
 
             # Mark as embedded
             supabase.update_paper_status(paper_id, True)

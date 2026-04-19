@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import faiss
+import pickle
 from qdrant_client.http import models
 from .quantization import TurboQuantProd
 
@@ -8,6 +9,21 @@ class ARQBuilder:
     def __init__(self, dimension=768):
         self.dimension = dimension
         self.tq_prod = TurboQuantProd(d=dimension, b=4)
+        
+        # Load weights if available
+        weights_path = "backend/data/model_weights.pkl"
+        if os.path.exists(weights_path):
+            try:
+                with open(weights_path, "rb") as f:
+                    weights = pickle.load(f)
+                arq_weights = weights.get("arq", {})
+                if arq_weights:
+                    self.tq_prod.tq_mse.Pi = arq_weights.get("Pi", self.tq_prod.tq_mse.Pi)
+                    self.tq_prod.S = arq_weights.get("S", self.tq_prod.S)
+                    self.tq_prod.tq_mse.centroids = arq_weights.get("centroids", self.tq_prod.tq_mse.centroids)
+                    self.tq_prod.alpha = arq_weights.get("alpha", self.tq_prod.alpha)
+            except Exception:
+                pass
 
     def get_storage_config(self):
         """Trả về cấu hình lưu trữ tối ưu của ARQ cho Qdrant."""
