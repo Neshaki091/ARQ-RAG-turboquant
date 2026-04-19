@@ -106,24 +106,40 @@ def main():
         logger.error("Missing Qdrant credentials!")
         return
 
-    client = QdrantClient(url=Q_URL, api_key=Q_KEY)
+    # Khởi tạo client với timeout lớn hơn để tránh lỗi ReadTimeout
+    client = QdrantClient(url=Q_URL, api_key=Q_KEY, timeout=60.0)
     
-    logger.info(f"Fetching {SAMPLE_SIZE} vectors from 'vector_raw' as a sample...")
+    logger.info(f"Fetching {SAMPLE_SIZE} vectors from 'vector_raw' as a sample using iterative scroll...")
     
-    # Scroll through vector_raw to get a sample
-    # Note: We just take the first N vectors as a representative sample
-    points, _ = client.scroll(
-        collection_name="vector_raw",
-        limit=SAMPLE_SIZE,
-        with_vectors=True,
-        with_payload=False
-    )
+    # Lấy mẫu theo đợt (Iterative Scrolling) để tránh timeout
+    all_sampled_points = []
+    next_offset = None
+    BATCH_FETCH = 1000  # Lấy 1000 cái mỗi lần
     
-    if not points:
+    while len(all_sampled_points) < SAMPLE_SIZE:
+        limit_to_fetch = min(BATCH_FETCH, SAMPLE_SIZE - len(all_sampled_points))
+        points, next_offset = client.scroll(
+            collection_name="vector_raw",
+            limit=limit_to_fetch,
+            with_vectors=True,
+            with_payload=False,
+            offset=next_offset
+        )
+        
+        if not points:
+            break
+            
+        all_sampled_points.extend(points)
+        logger.info(f"  Downloaded {len(all_sampled_points)}/{SAMPLE_SIZE} vectors...")
+        
+        if next_offset is None:
+            break
+    
+    if not all_sampled_points:
         logger.error("No vectors found in 'vector_raw' to train on!")
         return
     
-    embeddings = np.array([p.vector for p in points], dtype='float32')
+    embeddings = np.array([p.vector for p in all_sampled_points], dtype='float32')
     logger.info(f"Collected {len(embeddings)} vectors. Starting training...")
 
     # 1. SQ8

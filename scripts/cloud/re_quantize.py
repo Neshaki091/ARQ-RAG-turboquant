@@ -119,7 +119,7 @@ def main():
     with open(weights_path, "rb") as f:
         weights = pickle.load(f)
 
-    client = QdrantClient(url=Q_URL, api_key=Q_KEY)
+    client = QdrantClient(url=Q_URL, api_key=Q_KEY, timeout=60.0)
     
     # Initialize models
     sq8 = ManualSQ8(d=768, weights=weights['sq8'])
