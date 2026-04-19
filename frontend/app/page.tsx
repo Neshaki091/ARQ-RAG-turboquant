@@ -243,7 +243,7 @@ export default function Dashboard() {
                   <h3 className="text-lg font-bold mb-4 flex items-center gap-2 text-slate-800"><ActivityIcon size={20} className="text-blue-600" /> Interaction Console</h3>
                   <div className="flex-1 overflow-y-auto mb-4 space-y-4 pr-2 custom-scrollbar">
                     {messages.length === 0 ? <div className="h-full flex flex-col items-center justify-center opacity-30 gap-4"><ActivityIcon size={60} /><p className="font-bold">Hệ thống sẵn sàng xử lý truy vấn</p></div> : messages.map((m, i) => (
-                      <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[85%] p-4 rounded-2xl shadow-sm ${m.role === "user" ? "bg-blue-600 text-white" : "bg-slate-50 border border-slate-200"}`}><ReactMarkdown className="text-sm prose prose-slate max-w-none">{m.content}</ReactMarkdown></div></div>
+                      <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}><div className={`max-w-[85%] p-4 rounded-2xl shadow-sm ${m.role === "user" ? "bg-blue-600 text-white" : "bg-slate-50 border border-slate-200"}`}><div className="text-sm prose prose-slate max-w-none"><ReactMarkdown>{m.content}</ReactMarkdown></div></div></div>
                     ))}
                   </div>
                   <form onSubmit={handleChatSubmit} className="relative flex items-center gap-3 border-t border-slate-100 pt-4">
