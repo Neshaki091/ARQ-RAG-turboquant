@@ -154,28 +154,52 @@ def main():
     # Define collections to sync (Adaptive will share 'vector_raw' to save cloud space)
     target_collections = ["vector_pq", "vector_sq8", "vector_arq"]
 
+    # Lấy số lượng vector gốc để so sánh
+    raw_info = client.get_collection("vector_raw")
+    raw_count = raw_info.points_count
+    
+    # Cho phép ghi đè qua biến môi trường (Vd: FORCE_REQUANTIZE=vector_arq,vector_sq8)
+    force_list = os.getenv("FORCE_REQUANTIZE", "").split(",")
+    
+    active_targets = []
+
     for name in target_collections:
-        logger.info(f"🔄 Preparing collection: {name}")
+        exists = client.collection_exists(name)
+        should_skip = False
         
-        # Pure Payload Storage: Hoàn toàn không lưu vector trên Cloud cho PQ, SQ8, ARQ
-        v_config = {} 
-        q_config = None
+        if exists and name not in force_list:
+            count = client.get_collection(name).points_count
+            if count == raw_count:
+                logger.info(f"⏩ Skipping {name}: Already has {count} points. (Use FORCE_REQUANTIZE to override)")
+                should_skip = True
         
-        if name == "vector_arq":
-            q_config = models.ScalarQuantization(
-                scalar=models.ScalarQuantizationConfig(type=models.ScalarType.INT8, always_ram=True)
+        if not should_skip:
+            logger.info(f"🔄 Preparing collection: {name}")
+            active_targets.append(name)
+            
+            # Pure Payload Storage config
+            v_config = {} 
+            q_config = None
+            if name == "vector_arq":
+                q_config = models.ScalarQuantization(
+                    scalar=models.ScalarQuantizationConfig(type=models.ScalarType.INT8, always_ram=True)
+                )
+            
+            if exists:
+                client.delete_collection(name)
+            
+            client.create_collection(
+                collection_name=name,
+                vectors_config=v_config,
+                on_disk_payload=True,
+                quantization_config=q_config
             )
-        
-        if client.collection_exists(name):
-            logger.info(f"Recreating collection {name}...")
-            client.delete_collection(name)
-        
-        client.create_collection(
-            collection_name=name,
-            vectors_config=v_config,
-            on_disk_payload=True,
-            quantization_config=q_config
-        )
+
+    if not active_targets:
+        logger.info("✅ All target collections are already up-to-date. Nothing to do.")
+        return
+
+    logger.info(f"Starting bulk re-quantization for: {active_targets}")
 
     logger.info("Starting bulk re-quantization from 'vector_raw' for all models...")
     
