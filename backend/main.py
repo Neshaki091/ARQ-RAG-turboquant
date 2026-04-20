@@ -62,8 +62,16 @@ dispatcher: Optional[ChatDispatcher] = None
 async def startup_event():
     global dispatcher
     logger.info("🚀 ARQ-RAG Backend đang khởi động...")
-    dispatcher = ChatDispatcher()
-    logger.info("✅ Backend sẵn sàng!")
+    try:
+        dispatcher = ChatDispatcher()
+        logger.info("✅ Backend sẵn sàng!")
+    except Exception as e:
+        logger.error(
+            f"⚠️  Không thể khởi tạo ChatDispatcher: {e}\n"
+            "Kiểm tra SUPABASE_URL, SUPABASE_KEY trong .env\n"
+            "Backend chạy nhưng /chat sẽ trả lỗi cho đến khi credentials được cấu hình."
+        )
+        # KHÔNG raise — để FastAPI vẫn start, /health vẫn trả lời được
 
 
 # ── Pydantic Models ────────────────────────────────────────────────────
@@ -92,8 +100,14 @@ class ChatResponse(BaseModel):
 @app.get("/health", tags=["System"])
 async def health_check():
     """Health check — kiểm tra backend và Qdrant collections."""
+    if dispatcher is None:
+        return {
+            "status": "degraded",
+            "message": "ChatDispatcher chưa khởi tạo. Kiểm tra SUPABASE_URL và SUPABASE_KEY trong .env",
+            "version": "1.0.0",
+        }
     try:
-        status = dispatcher.get_collections_status() if dispatcher else {}
+        status = dispatcher.get_collections_status()
         return {
             "status": "ok",
             "version": "1.0.0",

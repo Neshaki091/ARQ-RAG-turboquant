@@ -33,16 +33,16 @@ services:
       - "11434:11434"
     volumes:
       - ollama_models:/root/.ollama
-    # Hỗ trợ GPU NVIDIA (comment out nếu chạy CPU-only)
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    # GPU NVIDIA: bỏ comment block bên dưới nếu có card NVIDIA
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
     # Tự động pull model nomic-embed-text khi container start
-    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 5 && ollama pull nomic-embed-text:v1.5 && wait"]
+    entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 8 && ollama pull nomic-embed-text:v1.5 && wait"]
     networks:
       - arq_net
 
@@ -67,6 +67,12 @@ services:
       - ollama
     volumes:
       - ./backend:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
     networks:
       - arq_net
 
@@ -77,11 +83,11 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: arq_cloudflared
     restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    env_file:
-      - .env
-    environment:
-      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    # Chỉ chạy khi có profile 'tunnel':
+    # docker compose --profile tunnel up -d
+    profiles:
+      - tunnel
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
       - backend
     networks:
