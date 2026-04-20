@@ -61,15 +61,24 @@ python scripts/cloud/re_quantize.py
 - [Kiến trúc hệ thống (ARCHITECTURE.md)](./ARCHITECTURE.md)
 - [Thuật toán TurboQuant (Research Paper Reference)](./docs/theory.md) (nếu có)
 
-## 📊 Chạy Thực nghiệm Hệ thống (Super Benchmark)
-
-Để tự động chạy toàn bộ tập câu hỏi mẫu (483 câu) qua cả 5 mô hình (Raw, Adaptive, PQ, SQ8, ARQ) và thu thập chỉ số RAM/Latency vào Database, hãy đảm bảo Backend đang chạy và thực hiện lệnh:
-
-```powershell
-python legacy/scripts/run_all_models.py
-```
-
-*Lưu ý: Script này sẽ tự động xoay tua API Key để tránh giới hạn Rate Limit và lưu kết quả trực tiếp vào bảng `benchmarks` trên Supabase.*
+## 📊 Chạy Thực nghiệm Hệ thống
+Để tự động chạy tập câu hỏi thực nghiệm và thu thập chỉ số RAM/Latency vào Database, hãy sử dụng script `super_benchmark.py` trực tiếp trong Docker:
+ 
+ ```powershell
+ # Chạy toàn bộ (mặc định)
+ docker exec -it arq_rag_backend python super_benchmark.py
+ 
+ # Chạy cho một mô hình cụ thể (vd: ARQ)
+ docker exec -it arq_rag_backend python super_benchmark.py --model vector_arq
+ 
+ # Chạy giới hạn số lượng câu hỏi (vd: 10 câu đầu)
+ docker exec -it arq_rag_backend python super_benchmark.py --count 10
+ ```
+ 
+ **Các tính năng nổi bật:**
+ * **Checkpoint & Resume**: Tự động bỏ qua các câu hỏi đã hoàn thành (lưu tại `benchmark_progress.json`).
+ * **Pure RAM Delta**: Tự động giải phóng Cache và RAM trước mỗi câu hỏi để đảm bảo chỉ số đo lường là chuẩn xác nhất.
+ * **Key Rotation**: Tự động xoay tua API Key để tránh giới hạn Rate Limit của Gemini.
 
 ---
 *Tài liệu hướng dẫn triển khai dự án ARQ-RAG (TurboQuant).*

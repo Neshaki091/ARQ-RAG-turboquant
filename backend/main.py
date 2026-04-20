@@ -491,7 +491,11 @@ class BenchmarkQueryRequest(BaseModel):
 
 @app.post("/api/benchmark/query")
 async def benchmark_query(req: BenchmarkQueryRequest):
-    import time
+    from shared.native_engine import NativeEngine
+    engine = NativeEngine()
+    engine.clear_all_cache()
+    time.sleep(0.5) # Để OS giải phóng RAM
+
     tracker = MemoryTracker(os.getpid())
     monitor_thread = threading.Thread(target=tracker.track, daemon=True)
     monitor_thread.start()

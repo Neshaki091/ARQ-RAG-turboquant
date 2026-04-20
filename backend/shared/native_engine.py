@@ -61,7 +61,16 @@ class NativeEngine:
         vm = VectorStoreManager()
         return vm.client
 
-    def ensure_model(self, model_type):
+    def clear_all_cache(self):
+        logger.info("🧹 NativeEngine: Clearing all cached models and forcing Garbage Collection...")
+        self.cache = {}
+        self.current_group = None
+        import gc
+        for _ in range(3):
+            gc.collect()
+        time.sleep(0.3) # Nhường time cho OS reclaim bộ nhớ
+
+    def ensure_model(self, model_type, force_reload=False):
         group = None
         if model_type in ["vector_raw", "vector_adaptive"]:
             group = "raw"
@@ -72,14 +81,14 @@ class NativeEngine:
         elif model_type == "vector_arq":
             group = "arq"
         
-        if self.current_group == group and self.cache:
+        # Nếu không ép buộc reload và đã có sẵn trong RAM cùng group thì bỏ qua
+        if not force_reload and self.current_group == group and self.cache:
             return 0
 
-        logger.info(f"🚀 Switching Native Engine cache to group: {group} (Requested: {model_type})")
+        logger.info(f"🚀 {'FORCE RELOAD' if force_reload else 'Switching'} Native Engine cache to group: {group} (Requested: {model_type})")
         
-        self.cache = {}
-        gc.collect()
-        time.sleep(0.1)
+        # Dọn dẹp trước khi nạp
+        self.clear_all_cache()
 
         start_time = time.time()
         client = self._get_qdrant_client()
