@@ -1,0 +1,65 @@
+# ============================================================
+# ARQ-RAG TurboQuant — .gitignore
+# ============================================================
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# --- Environment & Secrets ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# --- Model Weights & Data (lưu trên Supabase) ---
+*.pkl
+*.bin
+*.npy
+*.npz
+centroids/
+
+# --- Qdrant local storage ---
+backend/data/qdrant_storage/
+qdrant_storage/
+
+# --- PDF data ---
+backend/data/pdfs/
+data/pdfs/
+
+# --- Node.js / Frontend ---
+node_modules/
+.next/
+.vercel/
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+
+# --- Docker ---
+.docker/
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Cloudflare ---
+.cloudflared/cert.pem
