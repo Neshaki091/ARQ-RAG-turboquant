@@ -19,8 +19,6 @@ def sanitize_string(s):
         return s.replace("\u0000", "").replace("\x00", "")
     return s
 
-from ingest import IngestionManager
-from shared.embed import EmbeddingManager
 from shared.supabase_client import SupabaseManager
 from shared.vector_store import VectorStoreManager
 
@@ -124,18 +122,12 @@ app.add_middleware(
 state = {
     "status": "IDLE", 
     "progress": 0,
-    "ingest_current": 0,
-    "ingest_total": 0,
-    "embed_current": 0,
-    "embed_total": 0,
     "last_error": None,
     "last_latency": 0,
     "benchmark_running": False,
     "benchmark_model": None
 }
 
-class IngestRequest(BaseModel):
-    num_files: int = 5
 
 class PurgeRequest(BaseModel):
     secret_key: str
@@ -175,45 +167,6 @@ async def list_pdfs():
     files = sm.list_files("papers")
     return {"files": files}
 
-@app.post("/run-ingest")
-async def run_ingest(req: IngestRequest, background_tasks: BackgroundTasks):
-    if state["status"] not in ["IDLE", "COMPLETED"]:
-        raise HTTPException(status_code=400, detail="Hệ thống đang bận")
-    state["status"] = "INGESTING"
-    state["progress"] = 0
-    def process():
-        try:
-            im = IngestionManager()
-            im.process_n_files(req.num_files)
-            state["status"] = "IDLE"
-            state["progress"] = 100
-        except Exception as e:
-            state["status"] = "IDLE"
-            state["last_error"] = str(e)
-    background_tasks.add_task(process)
-    return {"message": "Bắt đầu trích xuất PDF..."}
-
-@app.post("/run-embed")
-async def run_embed(background_tasks: BackgroundTasks):
-    if state["status"] not in ["IDLE", "COMPLETED"]:
-        raise HTTPException(status_code=400, detail="Hệ thống đang bận")
-    state["status"] = "EMBEDDING"
-    state["progress"] = 0
-    def process():
-        try:
-            em = EmbeddingManager()
-            chunks, embeddings = em.run_embedding()
-            if chunks and embeddings is not None:
-                state["status"] = "INDEXING"
-                im = IngestionManager()
-                im.sync_to_qdrant(chunks, embeddings)
-            state["status"] = "IDLE"
-            state["progress"] = 100
-        except Exception as e:
-            state["status"] = "IDLE"
-            state["last_error"] = str(e)
-    background_tasks.add_task(process)
-    return {"message": "Bắt đầu tạo embeddings..."}
 
 @app.post("/purge-data")
 async def purge_data(req: PurgeRequest):
@@ -586,23 +539,7 @@ async def benchmark_query(req: BenchmarkQueryRequest):
         "retrieval_latency_ms": retrieval_lat
     }
 
-@app.post("/run-auto-pipeline")
-async def run_auto_pipeline(req: IngestRequest, background_tasks: BackgroundTasks):
-    state["status"] = "INGESTING"
-    state["progress"] = 0
-    def process():
-        try:
-            IngestionManager().process_n_files(req.num_files)
-            chunks, embeddings = EmbeddingManager().run_embedding()
-            if chunks and embeddings is not None:
-                IngestionManager().sync_to_qdrant(chunks, embeddings)
-            state["status"] = "COMPLETED"
-            state["progress"] = 100
-        except Exception as e:
-            state["status"] = "IDLE"
-            state["last_error"] = str(e)
-    background_tasks.add_task(process)
-    return {"message": "Bắt đầu pipeline..."}
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
