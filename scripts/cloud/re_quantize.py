@@ -33,12 +33,22 @@ class TurboQuantMSE:
 
     def quantize_batch(self, X):
         Y = np.dot(X, self.Pi.T)
-        diffs = np.abs(Y[:, :, np.newaxis] - self.centroids[np.newaxis, np.newaxis, :])
+        # centroids: (K, D)
+        # Y: (N, D) -> (N, D, 1)
+        # centroids.T: (D, K) -> (1, D, K)
+        # Broadcast subtraction to find nearest centroid per dimension
+        diffs = np.abs(Y[:, :, np.newaxis] - self.centroids.T[np.newaxis, :, :])
         idx = np.argmin(diffs, axis=2)
         return idx
 
     def dequantize_batch(self, idx):
-        Y_tilde = self.centroids[idx]
+        # idx: (N, D)
+        # centroids: (K, D)
+        # Reconstruct Y_tilde using advanced indexing: centroids[index, dimension]
+        num_points, num_dims = idx.shape
+        # Fancy indexing into (K, D) using (N, D) and (D,)
+        # result shape is (N, D)
+        Y_tilde = self.centroids[idx, np.arange(num_dims)]
         X_tilde = np.dot(Y_tilde, self.Pi)
         return X_tilde
 

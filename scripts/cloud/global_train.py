@@ -41,13 +41,19 @@ class TurboQuantMSE:
         self.centroids = np.zeros(self.num_centroids)
 
     def train(self, X):
-        # Training centroids for projected residuals
+        # Training per-dimension centroids for projected residuals
         Y = np.dot(X, self.Pi.T)
-        y_flat = Y.flatten().reshape(-1, 1)
-        km = faiss.Kmeans(d=1, k=self.num_centroids, niter=20)
-        km.train(y_flat)
-        self.centroids = np.sort(km.centroids.flatten())
-        logger.info(f"TurboQuantMSE trained. Centroids: {self.centroids}")
+        self.centroids = np.zeros((self.num_centroids, self.d))
+        logger.info(f"Training per-dimension centroids for ARQ (shape: {self.centroids.shape})...")
+        
+        for j in range(self.d):
+            y_col = Y[:, j].reshape(-1, 1)
+            # Dùng niter ít hơn để đẩy nhanh tốc độ train cho 768 chiều
+            km = faiss.Kmeans(d=1, k=self.num_centroids, niter=10, verbose=False)
+            km.train(y_col)
+            self.centroids[:, j] = np.sort(km.centroids.flatten())
+        
+        logger.info(f"✅ TurboQuantMSE matrix training complete.")
 
 class TurboQuantProd:
     def __init__(self, d, b, random_state=None):
