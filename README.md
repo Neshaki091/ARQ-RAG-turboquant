@@ -61,5 +61,22 @@ python scripts/cloud/re_quantize.py
 - [Kiến trúc hệ thống (ARCHITECTURE.md)](./ARCHITECTURE.md)
 - [Thuật toán TurboQuant (Research Paper Reference)](./docs/theory.md) (nếu có)
 
+## 📊 Chạy Thực nghiệm Hệ thống (Super Benchmark)
+
+Để tự động chạy toàn bộ tập câu hỏi mẫu (483 câu) qua cả 5 mô hình (Raw, Adaptive, PQ, SQ8, ARQ) và thu thập chỉ số RAM/Latency vào Database, hãy đảm bảo Backend đang chạy và thực hiện lệnh:
+
+```powershell
+python legacy/scripts/run_all_models.py
+```
+
+*Lưu ý: Script này sẽ tự động xoay tua API Key để tránh giới hạn Rate Limit và lưu kết quả trực tiếp vào bảng `benchmarks` trên Supabase.*
+
 ---
-*Phát triển bởi đội ngũ ARQ-RAG Team.*
+*Tài liệu hướng dẫn triển khai dự án ARQ-RAG (TurboQuant).*
+
+# PHÁT TRIỂN BỞI 2 SINH VIÊN:
+- Huỳnh Công Luyện 
+- Nguyễn Đình Mạnh
+
+# MỤC TIÊU:
+- Tìm kiếm giải pháp tối ưu hóa tăng cường truy xuất lượng tử trực tuyến (Online Quantization-Enhanced Retrieval Optimization) trong hệ thống RAG.
