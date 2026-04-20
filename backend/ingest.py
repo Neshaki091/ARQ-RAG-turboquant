@@ -28,8 +28,6 @@ class IngestionManager:
         self.models = {
             "vector_raw": RawBuilder(),
             "vector_adaptive": AdaptiveBuilder(),
-            "vector_pq": PQBuilder(),
-            "vector_sq8": SQ8Builder(),
             "vector_arq": ARQBuilder()
         }
 
@@ -128,9 +126,20 @@ class IngestionManager:
             
             # Chuyển đổi index_data thành list of dicts phù hợp với payload
             extra_payloads = None
+            final_embeddings = embeddings # Mặc định dùng embedding gốc
+            
             if index_data is not None:
                 if name == "vector_arq":
                     extra_payloads = []
+                    # ARQ NATIVE COMPRESSION: Tái tạo vector từ miền nén
+                    # Đây là vector xấp xỉ sẽ được lưu vào Qdrant
+                    reconstructed_embs = builder.tq_prod.reconstruct_batch(
+                        index_data["idx"], 
+                        index_data["qjl"], 
+                        index_data["gamma"]
+                    )
+                    final_embeddings = reconstructed_embs.tolist()
+                    
                     for i in range(len(embeddings)):
                         extra_payloads.append({
                             "idx": index_data["idx"][i].tolist(),
@@ -138,12 +147,10 @@ class IngestionManager:
                             "gamma": float(index_data["gamma"][i]),
                             "orig_norm": float(index_data["orig_norm"][i])
                         })
-                elif name in ["vector_pq", "vector_sq8"]:
-                    # Với PQ/SQ8 thủ công, ta lưu mã nén vào payload nếu muốn so sánh
-                    extra_payloads = [{"codes": index_data[i].tolist()} for i in range(len(embeddings))]
 
             # Upsert
-            self.vector_manager.upsert_collection(name, chunks, embeddings, extra_payloads)
+            self.vector_manager.upsert_collection(name, chunks, final_embeddings, extra_payloads)
+
         
         # 3. Cập nhật trạng thái is_embedded vào Supabase Database
         try:

@@ -55,3 +55,11 @@ class TurboQuantProd:
         if orig_norms is not None:
             scores = scores * orig_norms
         return scores
+
+    def reconstruct_batch(self, idx, qjl, gamma):
+        """Tái tạo vector xấp xỉ từ các mã nén ARQ."""
+        X_mse = self.tq_mse.dequantize_batch(idx)
+        # Residual approximation: R ~ alpha * gamma * (qjl * S)
+        R_approx = self.alpha * gamma[:, np.newaxis] * np.dot(qjl.astype(float), self.S)
+        return X_mse + R_approx
+

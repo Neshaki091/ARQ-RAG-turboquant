@@ -1,10 +1,10 @@
-name: Phase 2 - Global Quantization
+name: Phase 2 - Global ARQ Quantization
 
 on:
   workflow_dispatch:
     inputs:
       batch_size:
-        description: 'Batch size for re-quantization'
+        description: 'Batch size for ARQ re-quantization'
         required: false
         default: '100'
       sample_size:
@@ -14,7 +14,7 @@ on:
 
 jobs:
   train:
-    name: Global Training (Consolidated weights)
+    name: Global Training (ARQ weights)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
@@ -40,7 +40,7 @@ jobs:
           python scripts/cloud/global_train.py
 
   requantize:
-    name: Bulk Re-quantization (Full collection)
+    name: Bulk ARQ Re-quantization
     needs: train
     runs-on: ubuntu-latest
     timeout-minutes: 360 # Allow up to 6 hours for 200k chunks
@@ -57,7 +57,7 @@ jobs:
         run: |
           pip install numpy qdrant-client supabase
 
-      - name: Run Bulk Re-quantization
+      - name: Run Bulk ARQ Re-quantization
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -66,3 +66,4 @@ jobs:
           BATCH_SIZE: ${{ github.event.inputs.batch_size }}
         run: |
           python scripts/cloud/re_quantize.py
+

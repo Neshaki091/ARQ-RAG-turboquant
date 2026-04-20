@@ -60,33 +60,14 @@ class TurboQuantProd:
         qjl[qjl == 0] = 1 
         return idx, qjl, gamma
 
-class ManualPQ:
-    def __init__(self, d, m, weights, nbits=8):
-        self.d = d
-        self.m = m
-        self.nbits = nbits
-        self.k = 2 ** nbits
-        self.ds = d // m
-        self.centroids = weights['centroids']
+    def reconstruct_batch(self, idx, qjl, gamma):
+        """Tái tạo vector xấp xỉ từ các mã nén ARQ."""
+        X_mse = self.tq_mse.dequantize_batch(idx)
+        # Residual approximation: R ~ alpha * gamma * (qjl * S)
+        R_approx = self.alpha * gamma[:, np.newaxis] * np.dot(qjl.astype(float), self.S)
+        return X_mse + R_approx
 
-    def quantize(self, X):
-        N = X.shape[0]
-        codes = np.zeros((N, self.m), dtype=np.uint8)
-        for i in range(self.m):
-            sub_X = X[:, i*self.ds : (i+1)*self.ds]
-            diffs = np.linalg.norm(sub_X[:, np.newaxis, :] - self.centroids[i][np.newaxis, :, :], axis=2)
-            codes[:, i] = np.argmin(diffs, axis=1)
-        return codes
-
-class ManualSQ8:
-    def __init__(self, d, weights):
-        self.d = d
-        self.min_val = weights['min_val']
-        self.max_val = weights['max_val']
-
-    def quantize(self, X):
-        X_scaled = (X - self.min_val) / (self.max_val - self.min_val)
-        return (np.clip(X_scaled, 0, 1) * 255).astype(np.uint8)
+# --- Main Process ---
 
 def main():
     Q_URL = os.getenv("QDRANT_CLOUD_URL")
@@ -121,30 +102,31 @@ def main():
 
     client = QdrantClient(url=Q_URL, api_key=Q_KEY, timeout=60.0)
     
-    # Initialize models
-    sq8 = ManualSQ8(d=768, weights=weights['sq8'])
-    pq = ManualPQ(d=768, m=32, weights=weights['pq'])
+    # Initialize ARQ model
     arq = TurboQuantProd(d=768, b=4, weights=weights['arq'])
 
-    collections = {
-        "vector_sq8": models.ScalarQuantization(scalar=models.ScalarQuantizationConfig(type=models.ScalarType.INT8, always_ram=True)),
-        "vector_pq": models.ProductQuantization(product=models.ProductQuantizationConfig(compression=models.CompressionRatio.X32, always_ram=True)),
-        "vector_arq": models.ScalarQuantization(scalar=models.ScalarQuantizationConfig(type=models.ScalarType.INT8, always_ram=True))
-    }
-
-    for name, q_config in collections.items():
-        if client.collection_exists(name):
-            logger.info(f"Recreating collection {name}...")
-            client.delete_collection(name)
-        
-        client.create_collection(
-            collection_name=name,
-            vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE, on_disk=True),
-            on_disk_payload=True,
-            quantization_config=q_config
+    # Collection configuration (Only ARQ)
+    # We use INT8 quantization in Qdrant for the RECONSTRUCTED vectors to save even more space
+    name = "vector_arq"
+    q_config = models.ScalarQuantization(
+        scalar=models.ScalarQuantizationConfig(
+            type=models.ScalarType.INT8, 
+            always_ram=True
         )
+    )
 
-    logger.info("Starting batch re-quantization from 'vector_raw'...")
+    if client.collection_exists(name):
+        logger.info(f"Recreating collection {name}...")
+        client.delete_collection(name)
+    
+    client.create_collection(
+        collection_name=name,
+        vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE, on_disk=True),
+        on_disk_payload=True,
+        quantization_config=q_config
+    )
+
+    logger.info("Starting batch re-quantization from 'vector_raw' focusing ONLY on ARQ...")
     
     scroll_token = None
     processed_count = 0
@@ -165,26 +147,13 @@ def main():
         embeddings = np.array([p.vector for p in points], dtype='float32')
         chunks_payload = [p.payload for p in points]
         
-        # 1. SQ8 Upsert
-        codes_sq8 = sq8.quantize(embeddings)
-        sq8_points = []
-        for i, p in enumerate(points):
-            payload = chunks_payload[i].copy()
-            payload["codes"] = codes_sq8[i].tolist()
-            sq8_points.append(models.PointStruct(id=p.id, vector=p.vector, payload=payload))
-        client.upsert("vector_sq8", sq8_points)
-
-        # 2. PQ Upsert
-        codes_pq = pq.quantize(embeddings)
-        pq_points = []
-        for i, p in enumerate(points):
-            payload = chunks_payload[i].copy()
-            payload["codes"] = codes_pq[i].tolist()
-            pq_points.append(models.PointStruct(id=p.id, vector=p.vector, payload=payload))
-        client.upsert("vector_pq", pq_points)
-
-        # 3. ARQ Upsert
+        # 1. ARQ Quantization
         idx, qjl, gamma = arq.quantize_batch(embeddings)
+        
+        # 2. ARQ Reconstruction (Tái tạo vector từ miền nén)
+        # Đây là bước quan trọng: Ta lưu vector xấp xỉ này vào Qdrant thay vì vector gốc
+        reconstructed_vectors = arq.reconstruct_batch(idx, qjl, gamma)
+        
         arq_points = []
         for i, p in enumerate(points):
             payload = chunks_payload[i].copy()
@@ -194,16 +163,23 @@ def main():
                 "gamma": float(gamma[i]),
                 "orig_norm": float(np.linalg.norm(embeddings[i]))
             })
-            arq_points.append(models.PointStruct(id=p.id, vector=p.vector, payload=payload))
+            # LƯU Ý: vector=reconstructed_vectors[i] (Không dùng p.vector gốc)
+            arq_points.append(models.PointStruct(
+                id=p.id, 
+                vector=reconstructed_vectors[i].tolist(), 
+                payload=payload
+            ))
+            
         client.upsert("vector_arq", arq_points)
 
         processed_count += len(points)
-        logger.info(f"Processed {processed_count} points...")
+        logger.info(f"Processed {processed_count} points into vector_arq...")
 
         if scroll_token is None:
             break
 
-    logger.info(f"✅ SUCCESS: Re-quantized {processed_count} points into all collections.")
+    logger.info(f"✅ SUCCESS: Re-quantized {processed_count} points using ARQ Reconstruction.")
+
 
 if __name__ == "__main__":
     main()

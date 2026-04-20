@@ -13,6 +13,12 @@ import httpx
 from collections import deque
 import threading
 
+def sanitize_string(s):
+    """Xóa bỏ các ký tự null (\u0000) có thể gây lỗi cho Postgres/Supabase."""
+    if isinstance(s, str):
+        return s.replace("\u0000", "").replace("\x00", "")
+    return s
+
 from ingest import IngestionManager
 from shared.embed import EmbeddingManager
 from shared.supabase_client import SupabaseManager
@@ -60,7 +66,7 @@ logging.basicConfig(
 )
 
 _TARGET_LOGGERS = [
-    "RAG-RAW", "RAG-PQ", "RAG-SQ8", "RAG-Adaptive", "ARQ-RAG", 
+    "RAG-RAW", "RAG-Adaptive", "ARQ-RAG", 
     "SharedRAG", "VectorStore", "Ingest", "Embedding", "Benchmark", 
     "ChatService", "Supabase", "uvicorn", "uvicorn.access", "httpx"
 ]
@@ -272,16 +278,15 @@ async def run_benchmark_ui(req: BenchmarkRequest, background_tasks: BackgroundTa
                     try:
                         sm.supabase.table("benchmarks").insert({
                             "model_name": req.model,
-                            "question": q["question"],
-                            "answer": res["answer"],
-                            "contexts": contexts_val,
-                            "ground_truth": q.get("ground_truth", ""),
+                            "question": sanitize_string(q["question"]),
+                            "answer": sanitize_string(res["answer"]),
+                            "contexts": [sanitize_string(c) for c in contexts_val],
+                            "ground_truth": sanitize_string(q.get("ground_truth", "")),
                             "latency_ms": res["latency_ms"],
                             "base_ram_mb": res["base_ram_mb"],
                             "peak_ram_mb": res["peak_ram_mb"],
                             "total_ram_mb": res["total_ram_mb"],
                             "retrieval_latency_ms": res.get("retrieval_latency_ms", 0),
-                            "rerank_latency_ms": res.get("rerank_latency_ms", 0),
                             "topic": q.get("topic", "General")
                         }).execute()
 
@@ -294,7 +299,11 @@ async def run_benchmark_ui(req: BenchmarkRequest, background_tasks: BackgroundTa
                                 json.dump(progress_data, f, indent=2)
 
                     except Exception as db_err:
-                        print(f"[Benchmark Insert Error] {db_err}\nFields: answer_len={len(res.get('answer',''))}, contexts_count={len(contexts_val)}")
+                        # Log chi tiết lỗi từ Supabase/PostgREST
+                        error_msg = str(db_err)
+                        print(f"❌ [Benchmark Insert Error] Detail: {error_msg}")
+                        if "400" in error_msg or "Bad Request" in error_msg:
+                            print(f"   Payload sent: model={req.model}, question={q.get('question','')}[:50]..., answer_len={len(res.get('answer',''))}")
                         raise
 
                 state["progress"] = int(((i+1)/len(test_subset))*100)
@@ -528,12 +537,17 @@ async def benchmark_query(req: BenchmarkQueryRequest):
         cs = ChatService()
         full_answer = ""
         contexts = []
+        retrieval_lat = 0
+        rerank_lat = 0
         async for chunk in cs.chat_stream(req.query, "google", req.collection):
             data = json.loads(chunk)
             # chat_service yield ra type "final" chứa toàn bộ kết quả
             if data["type"] == "final":
                 full_answer = data.get("answer", "")
                 contexts = data.get("contexts", [])
+                # Chỉ lấy retrieval_latency_ms — trọng tâm đồ án là tối ưu hóa truy xuất
+                retrieval_lat = data.get("retrieval_latency_ms", 0)
+                print(f"DEBUG: retrieval_lat={retrieval_lat}ms")
             # Fallback: nếu handler yield từng token riêng
             elif data["type"] == "text":
                 full_answer += data["content"]
@@ -558,6 +572,7 @@ async def benchmark_query(req: BenchmarkQueryRequest):
         "base_ram_mb": base_ram,
         "peak_ram_mb": peak_delta,
         "total_ram_mb": total_ram,
+        "retrieval_latency_ms": retrieval_lat
     }
 
 @app.post("/run-auto-pipeline")
