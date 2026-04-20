@@ -46,9 +46,9 @@ def sync():
                 local_client.create_collection(
                     collection_name=coll_name,
                     vectors_config=cloud_config.params.vectors,
-                    quantization_config=cloud_config.quantization_config,
-                    hnsw_config=cloud_config.hnsw_config,
-                    optimizers_config=cloud_config.optimizers_config
+                    quantization_config=cloud_config.quantization_config.dict() if cloud_config.quantization_config else None,
+                    hnsw_config=cloud_config.hnsw_config.dict() if cloud_config.hnsw_config else None,
+                    optimizers_config=cloud_config.optimizer_config.dict() if cloud_config.optimizer_config else None
                 )
 
             # Cuộn (Scroll) dữ liệu từ Cloud và Upsert vào Local

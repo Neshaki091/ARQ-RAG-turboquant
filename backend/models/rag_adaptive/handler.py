@@ -17,10 +17,16 @@ class ModelHandler:
         # 1. Embedding
         query_vector = np.array(self.cs.embed_manager.get_embedding(query))
         
-        # 2. Native Search (On 'vector_adaptive' collection)
-        results, search_time_ms, load_time = self.engine.search("vector_adaptive", query_vector, top_k)
+        # 2. Native Search (Search Wide with 'limit' e.g. 20)
+        logger.info(f"  [Adaptive] Searching wide with limit={limit}...")
+        results, search_time_ms, load_time = self.engine.search("vector_raw", query_vector, limit)
+        
+        # 3. Focus Narrow (Filter to top_k e.g. 5)
+        # Vì cùng dùng Cosine, ta chỉ cần lấy top_k kết quả đầu tiên từ kết quả search rộng
+        logger.info(f"  [Adaptive] Focusing narrow from {len(results)} to top_k={top_k}...")
+        results = results[:top_k]
 
-        # 3. Contexts
+        # 4. Contexts
         contexts = [res['payload'].get('content', "") for res in results]
         context_text = "\n\n".join(contexts)
 

@@ -20,59 +20,48 @@ Hệ thống được thiết kế theo mô hình **Dumb Storage - Smart Backend
 ## 2. Luồng Dữ liệu (System Flows)
 
 ### A. Cloud Pipeline (Ingestion & Quantization)
-Quy trình chuẩn bị dữ liệu diễn ra hoàn toàn trên môi trường Cloud Scripts:
-
+Quy trình chuẩn bị dữ liệu diễn ra hoàn toàn trên môi trường Cloud Scripts để tạo ra "Source of Truth":
 1.  **Ingestion**: `cloud_ingest.py` bóc tách PDF -> Chuyển thành Embeddings (Gemini) -> Lưu vào `vector_raw`.
-2.  **Training**: `global_train.py` thực hiện huấn luyện các tâm cụm (centroids) và ma trận chiếu (`Pi`, `S`) từ dữ liệu `vector_raw`.
-3.  **Re-Quantization**: `re_quantize.py` lấy dữ liệu từ `vector_raw`, áp dụng trọng số mô hình để sinh mã nén và ghi đè vào 4 collection: `adaptive`, `pq`, `sq8`, `arq`.
+2.  **Training**: `global_train.py` huấn luyện các tâm cụm (centroids) và ma trận chiếu (`Pi`, `S`) từ dữ liệu thô.
+3.  **Re-Quantization**: `re_quantize.py` sinh các mã nén và lưu vào các collection tương ứng trên Qdrant Cloud dưới dạng Pure Payload (không chứa vector).
 
-### B. Luồng Truy vấn Chat (Chat Flow)
+### B. Luồng Truy vấn Native Chat
 ```mermaid
 sequenceDiagram
     participant U as User
     participant B as Backend (FastAPI)
-    participant N as Native Engine
-    participant QC as Qdrant Cloud
+    participant N as Native Engine (RAM)
+    participant QC as Qdrant Cloud (Storage)
     participant L as LLM (Gemini)
 
     U->>B: Gửi câu hỏi (Query)
-    B->>B: Phân tích độ phức tạp (QueryAnalyzer)
-    B->>N: Yêu cầu mô hình (e.g. ARQ)
+    B->>N: Yêu cầu nạp dữ liệu (e.g. RAW hoặc ARQ)
     alt Cache chưa có
-        N->>QC: Scroll All Points (Payloads only)
-        QC-->>N: Trả về mã nén
-        N->>N: Chuyển đổi mã sang NumPy mảng
+        N->>QC: Scroll All Points (Fetch Payloads)
+        QC-->>N: Trả về dữ liệu thô/nén
+        N->>N: Xây dựng ma trận NumPy trên RAM
     end
-    N->>N: NumPy Scoring (Matrix Math)
-    N-->>B: Trả về Top-K Chunks
-    B->>L: Sinh câu trả lời (Gen Context)
+    B->>N: NumPy Scoring (Matrix Math)
+    N-->>B: Trả về Top-K Chunks + Memory Info
+    B->>L: Generation (Gemini)
     L-->>U: Trả về câu trả lời cuối cùng
 ```
 
 ### C. Luồng Đánh giá Tự động (Benchmark Flow)
-Quy trình đánh giá hiệu năng diễn ra tự động thông qua API `/api/benchmark/run-test`:
-1.  **Trigger**: Backend lấy tập câu hỏi mẫu từ Supabase.
-2.  **Execution**: Chạy song song/tuần tự câu hỏi qua 5 mô hình khác nhau.
-3.  **Monitoring**: `MemoryTracker` bắt đầu ghi lại RAM nền và RAM cao nhất.
-4.  **Logging**: Mỗi kết quả được ghi vào bảng `benchmarks` kèm:
-    - `retrieval_latency_ms`: Thời gian tính tại Native Engine.
-    - `peak_ram_mb`: Mức tăng RAM cao nhất so với RAM nền.
-5.  **RAGAS**: Chạy định kỳ để lấy điểm `faithfulness`, `relevancy` và lưu vào bảng `ragas_results`.
+Quy trình đánh giá hiệu năng được thực hiện tập trung tại Backend:
+1.  **Trigger**: API lấy tập câu hỏi mẫu từ Supabase.
+2.  **Execution**: Chạy tuần tự qua 5 mô hình. Mỗi mô hình sẽ tải dữ liệu vào RAM Backend (nếu chưa có).
+3.  **Monitoring**: `MemoryTracker` ghi nhận RAM Delta (mức tăng RAM thực tế của thuật toán).
+4.  **Logging**: Mọi chỉ số (Latency, RAM, RAGAS) được lưu vào Supabase để đối soát.
 
 ---
 
-## 3. Quy ước 5 Mô hình So sánh
+## 3. Quy ước 5 Mô hình So sánh (Full-Native Mode)
 
-| Tên Mô hình | Loại Vector | Thuật toán Tính điểm | Đặc điểm Nén |
+Toàn bộ 5 mô hình dưới đây đều chạy trên **RAM Backend**. Sự khác biệt nằm ở khối lượng dữ liệu và thuật toán xử lý:
+
+| Tên Mô hình | Nơi lưu trữ Vector | Thuật toán RAM | RAM Cost (Đồ án) |
 | :--- | :--- | :--- | :--- |
-| **RAW** | Float32 | Cosine Similarity (Brute-force) | Lấy toàn bộ Context (`top_k = limit`) |
-| **ADAPTIVE** | Float32 | Cosine Similarity (Focus Search) | Giống Raw nhưng chỉ lọc `top_k` tinh túy |
-| **PQ** | N/A (Payload) | Subspace Centroid Lookup | **Pure Payload (No Cloud Vectors)** |
-| **SQ8** | N/A (Payload) | De-quantized Dot Product | **Pure Payload (No Cloud Vectors)** |
-| **ARQ** | N/A (Payload) | **TurboQuant ADC Formula** | **Pure Payload (No Cloud Vectors)** |
-
-### Triết lý "Dumb Storage - Smart Backend":
-- **Cloud (Qdrant)**: Chỉ đóng vai trò là một Key-Value store lưu trữ mã nén. Chúng ta đã cấu hình để các collection này **không chứa bất kỳ dữ liệu vector nào** trên Cloud, giúp tiết kiệm tối đa chi phí lưu trữ.
 - **Backend (Native Engine)**: Tự nạp mã nén từ Payload vào RAM và tự mình "vắt óc" tính toán search. Điều này chứng minh thuật toán ARQ có thể chạy độc lập mà không cần đến tính năng search của Database.
 
 ### Điểm khác biệt giữa RAW và ADAPTIVE:
