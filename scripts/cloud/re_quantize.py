@@ -141,14 +141,16 @@ def main():
     pq = ManualPQ(d=768, m=32, weights=weights['pq'])
     sq8 = ManualSQ8(d=768, weights=weights['sq8'])
 
-    # Define collections to sync
-    target_collections = ["vector_adaptive", "vector_pq", "vector_sq8", "vector_arq"]
+    # Define collections to sync (Adaptive will share 'vector_raw' to save cloud space)
+    target_collections = ["vector_pq", "vector_sq8", "vector_arq"]
 
     for name in target_collections:
         logger.info(f"🔄 Preparing collection: {name}")
         
-        # Cấu hình quantization tùy theo loại
+        # Pure Payload Storage: Hoàn toàn không lưu vector trên Cloud cho PQ, SQ8, ARQ
+        v_config = {} 
         q_config = None
+        
         if name == "vector_arq":
             q_config = models.ScalarQuantization(
                 scalar=models.ScalarQuantizationConfig(type=models.ScalarType.INT8, always_ram=True)
@@ -160,7 +162,7 @@ def main():
         
         client.create_collection(
             collection_name=name,
-            vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE, on_disk=True),
+            vectors_config=v_config,
             on_disk_payload=True,
             quantization_config=q_config
         )
@@ -213,18 +215,16 @@ def main():
                         "gamma": float(gamma[i]),
                         "orig_norm": float(np.linalg.norm(embeddings[i]))
                     })
-                    # Native Engine chỉ dùng payload, ta xóa vector gốc khỏi Qdrant (thay bằng 0)
-                    vector = [0.0] * 768 
                 elif name == "vector_pq":
                     new_payload["codes"] = pq_codes[i].tolist()
-                    vector = [0.0] * 768
                 elif name == "vector_sq8":
                     new_payload["codes"] = sq8_codes[i].tolist()
-                    vector = [0.0] * 768
-                else: # vector_adaptive
-                    vector = embeddings[i].tolist()
 
-                target_points.append(models.PointStruct(id=p.id, vector=vector, payload=new_payload))
+                # Gán vector cho Qdrant (Rỗng cho nén, Thật cho Raw/Adaptive)
+                if name in ["vector_pq", "vector_sq8", "vector_arq"]:
+                    target_points.append(models.PointStruct(id=p.id, vector={}, payload=new_payload))
+                else:
+                    target_points.append(models.PointStruct(id=p.id, vector=embeddings[i].tolist(), payload=new_payload))
             
             client.upsert(name, target_points)
 

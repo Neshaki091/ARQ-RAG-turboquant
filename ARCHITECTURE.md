@@ -67,9 +67,13 @@ Quy trình đánh giá hiệu năng diễn ra tự động thông qua API `/api/
 | :--- | :--- | :--- | :--- |
 | **RAW** | Float32 | Cosine Similarity (Brute-force) | Lấy toàn bộ Context (`top_k = limit`) |
 | **ADAPTIVE** | Float32 | Cosine Similarity (Focus Search) | Giống Raw nhưng chỉ lọc `top_k` tinh túy |
-| **PQ** | Multi-uint8 | Subspace Centroid Lookup | Chia 32 subspaces, nén theo cụm |
-| **SQ8** | Uint8 Scalar | De-quantized Dot Product | Min-Max scaling (4x nén) |
-| **ARQ** | Mixed (idx,qjl) | **TurboQuant ADC Formula** | **Phân rã Thặng dư (Residual)** |
+| **PQ** | N/A (Payload) | Subspace Centroid Lookup | **Pure Payload (No Cloud Vectors)** |
+| **SQ8** | N/A (Payload) | De-quantized Dot Product | **Pure Payload (No Cloud Vectors)** |
+| **ARQ** | N/A (Payload) | **TurboQuant ADC Formula** | **Pure Payload (No Cloud Vectors)** |
+
+### Triết lý "Dumb Storage - Smart Backend":
+- **Cloud (Qdrant)**: Chỉ đóng vai trò là một Key-Value store lưu trữ mã nén. Chúng ta đã cấu hình để các collection này **không chứa bất kỳ dữ liệu vector nào** trên Cloud, giúp tiết kiệm tối đa chi phí lưu trữ.
+- **Backend (Native Engine)**: Tự nạp mã nén từ Payload vào RAM và tự mình "vắt óc" tính toán search. Điều này chứng minh thuật toán ARQ có thể chạy độc lập mà không cần đến tính năng search của Database.
 
 ### Điểm khác biệt giữa RAW và ADAPTIVE:
 - **RAW**: Ưu tiên tính đầy đủ. Nếu người dùng yêu cầu 20 chunks, hệ thống sẽ đưa cả 20 vào Prompt.

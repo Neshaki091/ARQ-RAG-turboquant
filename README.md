@@ -7,7 +7,9 @@
 [Link demo](https://arq-rag-turboquant.vercel.app/)
 
 ## 🌟 Tổng quan
-**ARQ-RAG** là một hệ thống RAG (Retrieval-Augmented Generation) tiên tiến được thiết kế để giải quyết bài toán cân bằng giữa **Độ chính xác (Accuracy)** và **Chi phí tài nguyên (Resource Cost)**. Dự án tập trung triển khai thuật toán **TurboQuant (ARQ)** - một kỹ thuật lượng tử hóa thặng dư thích ứng giúp nén vector cực hạn mà vẫn giữ được hiệu năng truy xuất vượt trội.
+Đồ án này tập trung vào việc **tìm kiếm giải pháp tối ưu hóa tăng cường truy xuất lượng tử trực tuyến (Online Quantization-Enhanced Retrieval Optimization)** trong hệ thống RAG. 
+
+Mục tiêu cốt lõi là giải quyết bài toán cân bằng giữa **Tốc độ truy xuất (Speed)** và **Độ chính xác ngữ cảnh (Contextual Accuracy)**. Bằng cách triển khai kỹ thuật lượng tử hóa thặng dư thích ứng (ARQ) dựa trên công nghệ TurboQuant, dự án minh chứng một giải pháp cho phép tìm kiếm dữ liệu lớn với độ trễ cực thấp trong khi vẫn đảm bảo chất lượng phản hồi của mô hình ngôn ngữ lớn (LLM).
 
 Dự án này phục vụ cho việc thực nghiệm và chứng minh ưu điểm của ARQ so với các phương pháp Baseline phổ biến như Product Quantization (PQ) hay Scalar Quantization (SQ8).
 

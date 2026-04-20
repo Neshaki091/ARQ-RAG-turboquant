@@ -87,7 +87,10 @@ class NativeEngine:
         collection_name = model_type
         if model_type == "vector_adaptive": collection_name = "vector_raw"
         
-        logger.info(f"📥 Loading all points from Qdrant collection: {collection_name}...")
+        # Decide if we need vectors based on group
+        with_vectors = (group == "raw")
+        
+        logger.info(f"📥 Loading all points from Qdrant collection: {collection_name} (with_vectors={with_vectors})...")
         
         all_points = []
         scroll_token = None
@@ -95,7 +98,7 @@ class NativeEngine:
             res, scroll_token = client.scroll(
                 collection_name=collection_name,
                 limit=2000,
-                with_vectors=True,
+                with_vectors=with_vectors,
                 with_payload=True,
                 offset=scroll_token
             )
