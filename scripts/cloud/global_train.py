@@ -63,39 +63,39 @@ class TurboQuantProd:
         self.tq_mse.train(X)
         logger.info("TurboQuantProd trained (MSE centroids learned).")
 
-# class ManualPQ:
-#     def __init__(self, d, m, nbits=8):
-#         self.d = d
-#         self.m = m
-#         self.nbits = nbits
-#         self.k = 2 ** nbits
-#         self.ds = d // m
-#         self.centroids = []
+class ManualPQ:
+    def __init__(self, d, m, nbits=8):
+        self.d = d
+        self.m = m
+        self.nbits = nbits
+        self.k = 2 ** nbits
+        self.ds = d // m
+        self.centroids = []
 
-#     def train(self, X):
-#         X = X.astype('float32')
-#         n_data = X.shape[0]
-#         self.centroids = []
-#         for i in range(self.m):
-#             sub_X = X[:, i*self.ds : (i+1)*self.ds]
-#             kmeans = faiss.Kmeans(d=self.ds, k=self.k, niter=20, verbose=False)
-#             kmeans.train(sub_X)
-#             self.centroids.append(kmeans.centroids)
-#         logger.info(f"ManualPQ trained for {self.m} subspaces.")
+    def train(self, X):
+        X = X.astype('float32')
+        n_data = X.shape[0]
+        self.centroids = []
+        for i in range(self.m):
+            sub_X = X[:, i*self.ds : (i+1)*self.ds]
+            kmeans = faiss.Kmeans(d=self.ds, k=self.k, niter=20, verbose=False)
+            kmeans.train(sub_X)
+            self.centroids.append(kmeans.centroids)
+        logger.info(f"ManualPQ trained for {self.m} subspaces.")
 
-# class ManualSQ8:
-#     def __init__(self, d):
-#         self.d = d
-#         self.min_val = None
-#         self.max_val = None
+class ManualSQ8:
+    def __init__(self, d):
+        self.d = d
+        self.min_val = None
+        self.max_val = None
 
-#     def train(self, X):
-#         self.min_val = np.min(X, axis=0)
-#         self.max_val = np.max(X, axis=0)
-#         diff = self.max_val - self.min_val
-#         diff[diff == 0] = 1e-10
-#         self.max_val = self.min_val + diff
-#         logger.info("ManualSQ8 trained (Global Min/Max learned).")
+    def train(self, X):
+        self.min_val = np.min(X, axis=0)
+        self.max_val = np.max(X, axis=0)
+        diff = self.max_val - self.min_val
+        diff[diff == 0] = 1e-10
+        self.max_val = self.min_val + diff
+        logger.info("ManualSQ8 trained (Global Min/Max learned).")
 
 def main():
     Q_URL = os.getenv("QDRANT_CLOUD_URL")
@@ -142,13 +142,13 @@ def main():
     embeddings = np.array([p.vector for p in all_sampled_points], dtype='float32')
     logger.info(f"Collected {len(embeddings)} vectors. Starting training...")
 
-    # 1. SQ8 (Bỏ qua)
-    # sq8 = ManualSQ8(d=768)
-    # sq8.train(embeddings)
+    # 1. SQ8
+    sq8 = ManualSQ8(d=768)
+    sq8.train(embeddings)
 
-    # 2. PQ (Bỏ qua)
-    # pq = ManualPQ(d=768, m=32, nbits=8)
-    # pq.train(embeddings)
+    # 2. PQ
+    pq = ManualPQ(d=768, m=32, nbits=8)
+    pq.train(embeddings)
 
     # 3. TurboQuant (ARQ)
     tq = TurboQuantProd(d=768, b=4)
@@ -156,8 +156,8 @@ def main():
 
     # Save weights
     weights = {
-        # "sq8": {"min_val": sq8.min_val, "max_val": sq8.max_val},
-        # "pq": {"centroids": pq.centroids},
+        "sq8": {"min_val": sq8.min_val, "max_val": sq8.max_val},
+        "pq": {"centroids": pq.centroids},
         "arq": {
             "Pi": tq.tq_mse.Pi,
             "S": tq.S,

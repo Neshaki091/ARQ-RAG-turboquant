@@ -67,6 +67,40 @@ class TurboQuantProd:
         R_approx = self.alpha * gamma[:, np.newaxis] * np.dot(qjl.astype(float), self.S)
         return X_mse + R_approx
 
+class ManualPQ:
+    def __init__(self, d, m, weights, nbits=8):
+        self.d = d
+        self.m = m
+        self.nbits = nbits
+        self.ds = d // m
+        self.centroids = weights['centroids']
+
+    def quantize_batch(self, X):
+        X = X.astype('float32')
+        n_data = X.shape[0]
+        codes = np.zeros((n_data, self.m), dtype='uint8')
+        for i in range(self.m):
+            sub_X = X[:, i*self.ds : (i+1)*self.ds]
+            # Dùng faiss để tìm centroid gần nhất nhanh hơn
+            import faiss
+            index = faiss.IndexFlatL2(self.ds)
+            index.add(self.centroids[i])
+            _, I = index.search(sub_X, 1)
+            codes[:, i] = I.reshape(-1)
+        return codes
+
+class ManualSQ8:
+    def __init__(self, d, weights):
+        self.d = d
+        self.min_val = weights['min_val']
+        self.max_val = weights['max_val']
+
+    def quantize_batch(self, X):
+        diff = self.max_val - self.min_val
+        X_scaled = (X - self.min_val) / diff
+        X_scaled = np.clip(X_scaled * 255, 0, 255).astype('uint8')
+        return X_scaled
+
 # --- Main Process ---
 
 def main():
@@ -102,31 +136,36 @@ def main():
 
     client = QdrantClient(url=Q_URL, api_key=Q_KEY, timeout=60.0)
     
-    # Initialize ARQ model
+    # Initialize models
     arq = TurboQuantProd(d=768, b=4, weights=weights['arq'])
+    pq = ManualPQ(d=768, m=32, weights=weights['pq'])
+    sq8 = ManualSQ8(d=768, weights=weights['sq8'])
 
-    # Collection configuration (Only ARQ)
-    # We use INT8 quantization in Qdrant for the RECONSTRUCTED vectors to save even more space
-    name = "vector_arq"
-    q_config = models.ScalarQuantization(
-        scalar=models.ScalarQuantizationConfig(
-            type=models.ScalarType.INT8, 
-            always_ram=True
+    # Define collections to sync
+    target_collections = ["vector_adaptive", "vector_pq", "vector_sq8", "vector_arq"]
+
+    for name in target_collections:
+        logger.info(f"🔄 Preparing collection: {name}")
+        
+        # Cấu hình quantization tùy theo loại
+        q_config = None
+        if name == "vector_arq":
+            q_config = models.ScalarQuantization(
+                scalar=models.ScalarQuantizationConfig(type=models.ScalarType.INT8, always_ram=True)
+            )
+        
+        if client.collection_exists(name):
+            logger.info(f"Recreating collection {name}...")
+            client.delete_collection(name)
+        
+        client.create_collection(
+            collection_name=name,
+            vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE, on_disk=True),
+            on_disk_payload=True,
+            quantization_config=q_config
         )
-    )
 
-    if client.collection_exists(name):
-        logger.info(f"Recreating collection {name}...")
-        client.delete_collection(name)
-    
-    client.create_collection(
-        collection_name=name,
-        vectors_config=models.VectorParams(size=768, distance=models.Distance.COSINE, on_disk=True),
-        on_disk_payload=True,
-        quantization_config=q_config
-    )
-
-    logger.info("Starting batch re-quantization from 'vector_raw' focusing ONLY on ARQ...")
+    logger.info("Starting bulk re-quantization from 'vector_raw' for all models...")
     
     scroll_token = None
     processed_count = 0
@@ -147,38 +186,57 @@ def main():
         embeddings = np.array([p.vector for p in points], dtype='float32')
         chunks_payload = [p.payload for p in points]
         
-        # 1. ARQ Quantization
+        # 1. ARQ Quantization & Reconstruction
         idx, qjl, gamma = arq.quantize_batch(embeddings)
+        reconstructed_arq = arq.reconstruct_batch(idx, qjl, gamma)
+
+        # 2. PQ Codes
+        pq_codes = pq.quantize_batch(embeddings)
+
+        # 3. SQ8 Codes
+        sq8_codes = sq8.quantize_batch(embeddings)
+
+        # 4. Adaptive (Matryoshka - just uses first 256 dims if we simulate, but here we just copy)
+        # In this project, 'adaptive' is treated as another float32 comparison but labeled differently
         
-        # 2. ARQ Reconstruction (Tái tạo vector từ miền nén)
-        # Đây là bước quan trọng: Ta lưu vector xấp xỉ này vào Qdrant thay vì vector gốc
-        reconstructed_vectors = arq.reconstruct_batch(idx, qjl, gamma)
-        
-        arq_points = []
-        for i, p in enumerate(points):
-            payload = chunks_payload[i].copy()
-            payload.update({
-                "idx": idx[i].tolist(),
-                "qjl": qjl[i].tolist(),
-                "gamma": float(gamma[i]),
-                "orig_norm": float(np.linalg.norm(embeddings[i]))
-            })
-            # LƯU Ý: vector=reconstructed_vectors[i] (Không dùng p.vector gốc)
-            arq_points.append(models.PointStruct(
-                id=p.id, 
-                vector=reconstructed_vectors[i].tolist(), 
-                payload=payload
-            ))
+        # Prepare batches for upsert
+        for name in target_collections:
+            target_points = []
+            for i, p in enumerate(points):
+                new_payload = chunks_payload[i].copy()
+                
+                # Cập nhật payload đặc thù cho từng mô hình
+                if name == "vector_arq":
+                    new_payload.update({
+                        "idx": idx[i].tolist(),
+                        "qjl": qjl[i].tolist(),
+                        "gamma": float(gamma[i]),
+                        "orig_norm": float(np.linalg.norm(embeddings[i]))
+                    })
+                    # Native Engine chỉ dùng payload, ta xóa vector gốc khỏi Qdrant (thay bằng 0)
+                    vector = [0.0] * 768 
+                elif name == "vector_pq":
+                    new_payload["codes"] = pq_codes[i].tolist()
+                    vector = [0.0] * 768
+                elif name == "vector_sq8":
+                    new_payload["codes"] = sq8_codes[i].tolist()
+                    vector = [0.0] * 768
+                else: # vector_adaptive
+                    vector = embeddings[i].tolist()
+
+                target_points.append(models.PointStruct(id=p.id, vector=vector, payload=new_payload))
             
-        client.upsert("vector_arq", arq_points)
+            client.upsert(name, target_points)
+
 
         processed_count += len(points)
-        logger.info(f"Processed {processed_count} points into vector_arq...")
+        logger.info(f"Processed {processed_count} points...")
 
         if scroll_token is None:
             break
 
-    logger.info(f"✅ SUCCESS: Re-quantized {processed_count} points using ARQ Reconstruction.")
+    logger.info(f"✅ SUCCESS: Re-quantized {processed_count} points for all 4 collections.")
+
 
 
 if __name__ == "__main__":

@@ -55,7 +55,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          pip install numpy qdrant-client supabase
+          pip install numpy qdrant-client supabase faiss-cpu
 
       - name: Run Bulk ARQ Re-quantization
         env:

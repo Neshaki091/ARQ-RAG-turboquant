@@ -151,10 +151,21 @@ async def get_status():
     process_ram_mb = process.memory_info().rss / (1024 * 1024)
     virtual_mem = psutil.virtual_memory()
     sys_ram_mb = virtual_mem.used / (1024 * 1024)
+    
+    # Lấy trạng thái của Native Engine (Cache info)
+    from shared.native_engine import NativeEngine
+    engine = NativeEngine()
+    engine_status = {
+        "current_group": engine.current_group,
+        "is_cached": len(engine.cache) > 0,
+        "num_points": len(engine.cache.get("ids", []))
+    }
+
     return {
         **state,
         "ram_usage": round(process_ram_mb, 2),
         "sys_ram_usage": round(sys_ram_mb, 2),
+        "engine": engine_status,
         "logs": list(ui_log_queue)
     }
 

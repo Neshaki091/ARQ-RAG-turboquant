@@ -1,84 +1,100 @@
-# Cấu trúc và Luồng hoạt động hệ thống ARQ-RAG
+# Kiến trúc Hệ thống ARQ-RAG (TurboQuant)
 
-Hệ thống được thiết kế để so sánh hiệu năng giữa các phương pháp RAG truyền thống và phương pháp **ARQ-RAG (Adaptive Reranking Quantization)**.
-
-## 1. Cấu trúc thư mục Modular (Project Structure)
-
-Hệ thống được tổ chức theo kiến trúc **Modular**, tách biệt logic lõi, các mô hình nén và phần dùng chung:
-
-```text
-DEMO_ARQ_RAG/
-├── backend/
-│   ├── models/             # Chứa các Handler riêng biệt cho 5 biến thể RAG
-│   │   ├── arq_rag/        # Mô hình ARQ (TurboQuant) + Reranking
-│   │   ├── rag_raw/        # Mô hình Baseline (không nén)
-│   │   ├── rag_adaptive/   # Mô hình Adaptive (chỉnh Limit/Top-K động)
-│   │   └── ...             # PQ, SQ8
-│   ├── shared/             # Các lớp dùng chung cho toàn hệ thống
-│   │   ├── vector_store.py # Quản lý Qdrant (5 collections)
-│   │   ├── supabase_client.py # Quản lý tài liệu và Cache
-│   │   ├── embed.py        # Tương tác với Ollama (Nomic)
-│   │   └── query_analyzer.py # Bộ não phân loại câu hỏi (Elite Keywords)
-│   ├── main.py             # FastAPI entry point & Routing
-│   ├── chat_service.py     # Điều phối Luồng Chat (Modular Dispatcher)
-│   ├── crawler_paper.py    # Tự động thu thập dữ liệu khoa học
-│   └── benchmark.py        # Hệ thống đánh giá hiệu năng (500 queries/model)
-├── frontend/               # Giao diện Next.js Dashboard
-└── docker/                 # Cấu hình triển khai container hóa
-```
-
-## 2. Luồng hoạt động (System Workflow)
-
-### A. Luồng Tiền xử lý dữ liệu (Ingestion Pipeline)
-```mermaid
-graph LR
-    A[PDF trên Supabase] --> B[Ingest: Trích xuất Text]
-    B --> C[Chunking: Chia nhỏ văn bản]
-    C --> D[Embedding: Chuyển thành Vector]
-    D --> E[(Qdrant: Lưu 5 Collections)]
-    E --> |Gồm có| E1[Raw, PQ, SQ8, Adaptive, ARQ]
-```
-
-### B. Luồng Truy vấn ARQ-RAG (Retrieval & Generation)
-Đây là trái tim của dự án, thể hiện tính "Adaptive":
-```mermaid
-sequenceDiagram
-    participant U as User (Frontend)
-    participant Q as QueryAnalyzer
-    participant S as Supabase (Cache)
-    participant V as VectorStore (Qdrant)
-    participant A as ARQ Reranker
-    participant L as LLM (Gemini/Qwen)
-
-    U->>Q: Gửi câu hỏi
-    Q->>S: Kiểm tra Cache phân loại?
-    S-->>Q: Trả về (nếu có)
-    alt Cache Miss
-        Q->>L: Phân loại câu hỏi (SIMPLE/COMPLEX)
-        L-->>Q: Kết quả phân loại
-        Q->>S: Lưu kết quả vào Cache
-    end
-    Q-->>U: Hiển thị chế độ xử lý (Adaptive)
-    
-    Q->>V: Search với Limit động (20 hoặc 80)
-    V-->>Q: Danh sách ứng viên thô
-    
-    rect rgb(240, 240, 240)
-        Note right of A: Bước tối ưu của ARQ
-        Q->>A: Batch ADC Reranking (Sắp xếp lại)
-        A-->>Q: Top K kết quả tốt nhất
-    end
-    
-    Q->>L: Gửi Context + Câu hỏi
-    L-->>U: Trả về câu trả lời (Streaming)
-```
-
-## 3. Các thành phần chính và vai trò
-
-- **TurboQuant (ARQ)**: Sử dụng kỹ thuật tích vô hướng trực tiếp trên dữ liệu đã nén để sắp xếp lại kết quả (Reranking) với tốc độ cực nhanh, giúp bù đắp sai số của quantization.
-- **QueryAnalyzer**: Đóng vai trò là "bộ não" điều phối. Nó quyết định xem câu hỏi khó hay dễ để cấp tài nguyên tìm kiếm phù hợp, giúp cân bằng giữa **Độ chính xác (Accuracy)** và **Độ trễ (Latency)**.
-- **Qdrant**: Cơ sở dữ liệu Vector lưu trữ 5 phiên bản khác nhau của cùng một dữ liệu để phục vụ việc Benchmark đối chứng.
+Tài liệu này cung cấp cái nhìn chuyên sâu về kiến trúc luồng dữ liệu, quy trình nén và hệ thống đánh giá của dự án **ARQ-RAG**.
 
 ---
-> [!TIP]
-> **Điểm nhấn của đồ án**: Chính là khả năng thích ứng (Adaptive) và việc sử dụng Supabase để cache kết quả phân loại, giúp hệ thống càng chạy càng nhanh hơn.
+
+## 1. Kiến trúc Tổng thể (Hybrid Cloud-Native)
+
+Hệ thống được thiết kế theo mô hình **Dumb Storage - Smart Backend**. Toàn bộ logic tìm kiếm và nén được đẩy về phía Backend CPU để tối ưu hóa khả năng kiểm soát và chứng minh hiệu năng thuật toán.
+
+-   **Cloud Layer (Qdrant & Supabase)**:
+    -   **Qdrant Cloud**: Lưu trữ Payload (mã nén, text). Các vector trong các collection nén là vector hằng số `[0.0, ...]`.
+    -   **Supabase**: Lưu trữ lịch sử Benchmark, bảng kết quả RAGAS, và `model_weights.pkl`.
+-   **Local Layer (FastAPI & Native Engine)**:
+    -   **Native Engine**: Quản lý bộ nhớ RAM động, thực hiện tính toán ma trận bằng NumPy.
+    -   **Chat Service**: Điều phối luồng xử lý từ lúc nhận query đến khi LLM trả lời.
+
+---
+
+## 2. Luồng Dữ liệu (System Flows)
+
+### A. Cloud Pipeline (Ingestion & Quantization)
+Quy trình chuẩn bị dữ liệu diễn ra hoàn toàn trên môi trường Cloud Scripts:
+
+1.  **Ingestion**: `cloud_ingest.py` bóc tách PDF -> Chuyển thành Embeddings (Gemini) -> Lưu vào `vector_raw`.
+2.  **Training**: `global_train.py` thực hiện huấn luyện các tâm cụm (centroids) và ma trận chiếu (`Pi`, `S`) từ dữ liệu `vector_raw`.
+3.  **Re-Quantization**: `re_quantize.py` lấy dữ liệu từ `vector_raw`, áp dụng trọng số mô hình để sinh mã nén và ghi đè vào 4 collection: `adaptive`, `pq`, `sq8`, `arq`.
+
+### B. Luồng Truy vấn Chat (Chat Flow)
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant B as Backend (FastAPI)
+    participant N as Native Engine
+    participant QC as Qdrant Cloud
+    participant L as LLM (Gemini)
+
+    U->>B: Gửi câu hỏi (Query)
+    B->>B: Phân tích độ phức tạp (QueryAnalyzer)
+    B->>N: Yêu cầu mô hình (e.g. ARQ)
+    alt Cache chưa có
+        N->>QC: Scroll All Points (Payloads only)
+        QC-->>N: Trả về mã nén
+        N->>N: Chuyển đổi mã sang NumPy mảng
+    end
+    N->>N: NumPy Scoring (Matrix Math)
+    N-->>B: Trả về Top-K Chunks
+    B->>L: Sinh câu trả lời (Gen Context)
+    L-->>U: Trả về câu trả lời cuối cùng
+```
+
+### C. Luồng Đánh giá Tự động (Benchmark Flow)
+Quy trình đánh giá hiệu năng diễn ra tự động thông qua API `/api/benchmark/run-test`:
+1.  **Trigger**: Backend lấy tập câu hỏi mẫu từ Supabase.
+2.  **Execution**: Chạy song song/tuần tự câu hỏi qua 5 mô hình khác nhau.
+3.  **Monitoring**: `MemoryTracker` bắt đầu ghi lại RAM nền và RAM cao nhất.
+4.  **Logging**: Mỗi kết quả được ghi vào bảng `benchmarks` kèm:
+    - `retrieval_latency_ms`: Thời gian tính tại Native Engine.
+    - `peak_ram_mb`: Mức tăng RAM cao nhất so với RAM nền.
+5.  **RAGAS**: Chạy định kỳ để lấy điểm `faithfulness`, `relevancy` và lưu vào bảng `ragas_results`.
+
+---
+
+## 3. Quy ước 5 Mô hình So sánh
+
+| Tên Mô hình | Loại Vector | Thuật toán Tính điểm | Đặc điểm Nén |
+| :--- | :--- | :--- | :--- |
+| **RAW** | Float32 | Cosine Similarity (Brute-force) | Lấy toàn bộ Context (`top_k = limit`) |
+| **ADAPTIVE** | Float32 | Cosine Similarity (Focus Search) | Giống Raw nhưng chỉ lọc `top_k` tinh túy |
+| **PQ** | Multi-uint8 | Subspace Centroid Lookup | Chia 32 subspaces, nén theo cụm |
+| **SQ8** | Uint8 Scalar | De-quantized Dot Product | Min-Max scaling (4x nén) |
+| **ARQ** | Mixed (idx,qjl) | **TurboQuant ADC Formula** | **Phân rã Thặng dư (Residual)** |
+
+### Điểm khác biệt giữa RAW và ADAPTIVE:
+- **RAW**: Ưu tiên tính đầy đủ. Nếu người dùng yêu cầu 20 chunks, hệ thống sẽ đưa cả 20 vào Prompt.
+- **ADAPTIVE**: Ưu tiên tính chính xác. Hệ thống search rộng (ví dụ 100 chunks) nhưng chỉ chọn ra những chunks có điểm số cao nhất (ví dụ 5 chunks) để đưa vào Prompt, giúp giảm nhiễu cho LLM.
+
+### Công thức ARQ (TurboQuant):
+$Score = (MSE\_Scores + \alpha \cdot \gamma \cdot QJL\_Dot) \cdot Orig\_Norm$
+- **MSE\_Scores**: Khoảng cách thô từ centroids.
+- **QJL\_Dot**: Thành phần hiệu chỉnh thặng dư bằng 1-bit code.
+
+---
+
+## 4. Hệ thống Chỉ số Đánh giá (Metrics Definition)
+
+### A. Hiệu năng Kỹ thuật
+-   **Retrieval Latency (ms)**: Thời gian nội tại của CPU tại Local để tìm được Top-K. Loại bỏ độ trễ network.
+-   **Base RAM (MB)**: Lượng RAM Backend chiếm dụng khi rảnh.
+-   **Peak RAM (MB)**: Lượng RAM tăng thêm tối đa khi một mô hình được nạp và tìm kiếm.
+-   **Load Time (s)**: Thời gian `scroll` dữ liệu từ Cloud về RAM (chỉ xảy ra ở lần switch model đầu tiên).
+
+### B. Chất lượng Nội dung (RAGAS)
+Hệ thống sử dụng Gemini-1.5-flash làm "Giám khảo" với các tham số:
+-   **Faithfulness**: Độ trung thực của câu trả lời so với ngữ cảnh trích xuất.
+-   **Answer Relevancy**: Độ liên quan của câu trả lời với câu hỏi gốc.
+-   **Context Precision**: Tỷ lệ các chunk đúng nằm ở thứ hạng cao trong kết quả tìm kiếm.
+
+---
+*Tài liệu này là tài liệu kỹ thuật chính thống cho báo cáo Đồ án tốt nghiệp ARQ-RAG.*

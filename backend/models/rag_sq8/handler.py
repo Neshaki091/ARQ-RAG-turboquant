@@ -2,134 +2,46 @@ import os
 import time
 import logging
 import numpy as np
-from .quantization import ManualSQ8
-from shared.vector_store import VectorStoreManager
-from langchain_core.messages import HumanMessage, SystemMessage
-from shared.context_filter import filter_relevant_contexts
+from shared.native_engine import NativeEngine
+from langchain_core.messages import HumanMessage
 
 logger = logging.getLogger("RAG-SQ8")
 
 class ModelHandler:
     def __init__(self, chat_service):
         self.cs = chat_service
-        self.vm = VectorStoreManager()
-        self.sq8 = ManualSQ8(d=768)
-
-        # 1. Load Global Weights (New Unified Method with Auto-Download)
-        import pickle
-        weights_dir = "backend/data"
-        weights_path = os.path.join(weights_dir, "model_weights.pkl")
-        
-        # Tự động tải từ Cloud nếu chưa có local
-        if not os.path.exists(weights_path):
-            logger.info(f"[RAG-SQ8] File {weights_path} không tồn tại. Đang tự động tải từ Supabase...")
-            try:
-                from shared.supabase_client import SupabaseManager
-                sm = SupabaseManager()
-                os.makedirs(weights_dir, exist_ok=True)
-                sm.download_file("centroids", "model_weights.pkl", weights_path)
-                logger.info("[RAG-SQ8] ✅ Đã tải thành công model_weights.pkl từ bucket 'centroids'")
-            except Exception as de:
-                logger.error(f"[RAG-SQ8] ❌ Không thể tự động tải weights: {de}")
-
-        if os.path.exists(weights_path):
-            try:
-                with open(weights_path, "rb") as f:
-                    weights = pickle.load(f)
-                
-                # Load SQ8 weights (Min/Max)
-                sq8_weights = weights.get("sq8", {})
-                if sq8_weights:
-                    self.sq8.min_val = sq8_weights.get("min_val", self.sq8.min_val)
-                    self.sq8.max_val = sq8_weights.get("max_val", self.sq8.max_val)
-                    logger.info(f"[RAG-SQ8] Đã load GLOBAL weights (Min/Max) từ {weights_path}")
-            except Exception as e:
-                logger.error(f"[RAG-SQ8] Lỗi khi load global weights: {e}")
+        self.engine = NativeEngine()
 
     async def handle(self, query, model_name, limit, top_k, language: str = "en"):
-        logger.info("=" * 60)
-        logger.info("[RAG-SQ8] BẮT ĐẦU TÌM KIẾM CHUNK")
-        logger.info(f"  Query: {query[:100]}{'...' if len(query) > 100 else ''}")
-        logger.info(f"  Params: limit={limit}, top_k={top_k}, model={model_name}")
-        logger.info(f"  SQ8 Config: d={self.sq8.d}")
-        logger.info("-" * 60)
-
-        # 1. Embedding query
         t0 = time.time()
+        # 1. Embedding
         query_vector = np.array(self.cs.embed_manager.get_embedding(query))
-        embed_time = time.time() - t0
-        logger.info(f"  [Bước 1] Embedding query -> vector dim={query_vector.shape[0]}, "
-                     f"norm={np.linalg.norm(query_vector):.4f}, thời gian={embed_time:.3f}s")
-
-        # 2. Vector search (Qdrant with SQ8 quantization config)
-        t1 = time.time()
-        search_results = self.vm.search("vector_sq8", query_vector, limit=limit)
-        search_time = time.time() - t1
-        logger.info(f"  [Bước 2] Qdrant search collection='vector_sq8' -> "
-                     f"trả về {len(search_results)} kết quả, thời gian={search_time:.3f}s")
-
-        if search_results:
-            scores = [getattr(hit, 'score', None) for hit in search_results]
-            logger.info(f"    Qdrant scores (top-5): {scores[:5]}")
-            logger.info(f"    Qdrant scores (min/max): min={min(s for s in scores if s is not None):.4f}, "
-                         f"max={max(s for s in scores if s is not None):.4f}"
-                         if any(s is not None for s in scores) else "    Qdrant scores: N/A")
-
-        # 3. Select contexts (Baseline thuần: Lấy trực tiếp từ kết quả nén SQ8 của Qdrant)
-        final_contexts = [hit.payload["content"] for hit in search_results[:top_k]]
-        top_hits = search_results[:top_k]
         
-        logger.info(f"  [Bước 3] Chọn top_k={top_k} chunk (SQ8 quantized search, không lọc nhiễu)")
-        for i, hit in enumerate(top_hits):
-            score = getattr(hit, 'score', 'N/A')
-            content_preview = hit.payload["content"][:80].replace('\n', ' ')
-            logger.info(f"    #{i+1} | score={score} | file={hit.payload.get('file', 'N/A')} | "
-                         f"preview: {content_preview}...")
+        # 2. Native Search (On 'vector_sq8' collection)
+        results, search_time_ms, load_time = self.engine.search("vector_sq8", query_vector, top_k)
 
-        # 4. Generation (Sử dụng Gemini 3.1 Flash Lite - Hỗ trợ Long Context)
-        MAX_CONTEXT_CHARS = 120000
-        context_text = "\n\n".join(final_contexts)
-        
-        if len(context_text) > MAX_CONTEXT_CHARS:
-            logger.warning(f"  [Tối ưu] Context quá lớn ({len(context_text)} ký tự). Đang cắt tỉa...")
-            context_text = context_text[:MAX_CONTEXT_CHARS] + "\n\n[...Cắt tỉa...]"
+        # 3. Contexts
+        contexts = [res['payload'].get('content', "") for res in results]
+        context_text = "\n\n".join(contexts)
 
-        lang_instruction = "Rả lời bằng Tiếng Việt." if language == "vi" else "Respond in English."
-        system_instructions = rf"""You are a RAG expert. Read the <CONTEXT> below and answer CONCISELY and DIRECTLY.
-
-RULES:
-1. CONCISE: Only answer the main point, no greetings, no verbose conclusions.
-2. LATEX: Use Markdown LaTeX ($...$ or $$...$$) for formulas.
-3. SOURCE: Start your answer with [RAG-SQ8].
-4. LANGUAGE: {lang_instruction}
-
-<CONTEXT>:
-{context_text}
-
-QUESTION: "{query}" """
+        # 4. Generation
+        lang_instruction = "Trả lời bằng Tiếng Việt." if language == "vi" else "Respond in English."
+        system_instructions = rf"""You are a RAG expert. Answer CONCISELY.
+RULES: Start with [RAG-SQ8]. {lang_instruction}
+<CONTEXT>: {context_text}
+QUESTION: {query}"""
 
         llm = self.cs.get_llm(model_name)
-        messages = [HumanMessage(content=system_instructions)]
-        
-        logger.info(f"  [Bước 4] Đang gọi LLM ({model_name}) để sinh câu trả lời...")
-        start_time = time.time()
-        response = llm.invoke(messages)
+        start_gen = time.time()
+        response = llm.invoke([HumanMessage(content=system_instructions)])
         answer = self.cs._extract_text(response.content)
-        
         if not answer.startswith("[RAG-SQ8]"):
             answer = f"[RAG-SQ8] {answer}"
-            
-        latency = time.time() - start_time
-        logger.info(f"  [Bước 4] LLM trả lời xong, latency={latency:.2f}s, ")
-
-        total_time = time.time() - t0
-        logger.info(f"[RAG-SQ8] HOÀN THÀNH | Tổng thời gian={total_time:.2f}s")
-        logger.info("=" * 60)
 
         return {
             "answer": answer,
-            "sources": [{"file": h.payload["file"], "content": h.payload["content"]} for h in top_hits],
-            "contexts": final_contexts,
-            "latency": round(latency, 2),
-            "retrieval_latency_ms": round(search_time * 1000, 2),  # Chỉ số cốt lõi: thời gian Qdrant search
+            "sources": [{"file": res['payload'].get("file", "unknown"), "content": res['payload'].get("content", "")} for res in results],
+            "contexts": contexts,
+            "latency": round(time.time() - start_gen, 2),
+            "retrieval_latency_ms": round(search_time_ms, 2),
         }

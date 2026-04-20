@@ -36,7 +36,7 @@ services:
       - ./qdrant_storage:/qdrant/storage
 
   qdrant-sync:
-    profiles: ["manual"]
+
     build:
       context: ./backend
     container_name: arq_rag_sync
