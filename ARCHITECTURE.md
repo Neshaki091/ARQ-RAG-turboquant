@@ -91,7 +91,7 @@ $Score = (MSE\_Scores + \alpha \cdot \gamma \cdot QJL\_Dot) \cdot Orig\_Norm$
 -   **Load Time (s)**: Thời gian `scroll` dữ liệu từ Cloud về RAM (chỉ xảy ra ở lần switch model đầu tiên).
 
 ### B. Chất lượng Nội dung (RAGAS)
-Hệ thống sử dụng Gemini-1.5-flash làm "Giám khảo" với các tham số:
+Hệ thống sử dụng Gemini-3.1-flash-lite-preview làm "Giám khảo" với các tham số:
 -   **Faithfulness**: Độ trung thực của câu trả lời so với ngữ cảnh trích xuất.
 -   **Answer Relevancy**: Độ liên quan của câu trả lời với câu hỏi gốc.
 -   **Context Precision**: Tỷ lệ các chunk đúng nằm ở thứ hạng cao trong kết quả tìm kiếm.
