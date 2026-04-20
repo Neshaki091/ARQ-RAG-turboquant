@@ -142,13 +142,13 @@ def main():
     embeddings = np.array([p.vector for p in all_sampled_points], dtype='float32')
     logger.info(f"Collected {len(embeddings)} vectors. Starting training...")
 
-    # 1. SQ8
-    sq8 = ManualSQ8(d=768)
-    sq8.train(embeddings)
+    # 1. SQ8 (Bỏ qua)
+    # sq8 = ManualSQ8(d=768)
+    # sq8.train(embeddings)
 
-    # 2. PQ
-    pq = ManualPQ(d=768, m=32, nbits=8)
-    pq.train(embeddings)
+    # 2. PQ (Bỏ qua)
+    # pq = ManualPQ(d=768, m=32, nbits=8)
+    # pq.train(embeddings)
 
     # 3. TurboQuant (ARQ)
     tq = TurboQuantProd(d=768, b=4)
@@ -156,8 +156,8 @@ def main():
 
     # Save weights
     weights = {
-        "sq8": {"min_val": sq8.min_val, "max_val": sq8.max_val},
-        "pq": {"centroids": pq.centroids},
+        # "sq8": {"min_val": sq8.min_val, "max_val": sq8.max_val},
+        # "pq": {"centroids": pq.centroids},
         "arq": {
             "Pi": tq.tq_mse.Pi,
             "S": tq.S,
