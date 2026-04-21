@@ -116,6 +116,16 @@ async def health_check():
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Service không khả dụng: {e}")
 
+@app.get("/version", tags=["System"])
+async def get_version():
+    """Lấy thông tin phiên bản backend."""
+    return {
+        "version": "1.0.0",
+        "description": "ARQ-RAG TurboQuant API",
+        "author": "Neshaki091",
+        "status": "live"
+    }
+
 
 @app.get("/models", tags=["System"])
 async def list_models():
