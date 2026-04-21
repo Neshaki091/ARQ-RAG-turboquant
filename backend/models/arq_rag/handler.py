@@ -84,6 +84,7 @@ class ARQRAGHandler:
         top_k: int = 10,
         limit: int = 40,
         session_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         t_start = time.perf_counter()
         session_id = session_id or str(uuid.uuid4())
@@ -97,7 +98,7 @@ class ARQRAGHandler:
 
         # Retrieval
         t_retrieve = time.perf_counter()
-        candidates = self.qdrant.search(COLLECTION_NAME, query_vec, limit=limit)
+        candidates = self.qdrant.search(COLLECTION_NAME, query_vec, limit=limit, payload_filter=filters)
         retrieve_ms = (time.perf_counter() - t_retrieve) * 1000
 
         if not candidates:
@@ -179,6 +180,7 @@ class ARQRAGHandler:
         top_k: int = 10,
         limit: int = 40,
         session_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Iterator[str]:
         t_start = time.perf_counter()
         session_id = session_id or str(uuid.uuid4())
@@ -186,7 +188,7 @@ class ARQRAGHandler:
         query_vec = self.embedder.embed_text(query_text)
         pq = self._get_pq()
         adc_table = pq.compute_adc_table(query_vec)
-        candidates = self.qdrant.search(COLLECTION_NAME, query_vec, limit=limit)
+        candidates = self.qdrant.search(COLLECTION_NAME, query_vec, limit=limit, payload_filter=filters)
 
         if not candidates:
             yield "[ARQ-RAG] Không tìm thấy kết quả."

@@ -69,6 +69,7 @@ class RAGRawHandler:
         top_k: int = 10,
         limit: int = 40,
         session_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Pipeline RAG chuẩn Float32: embed → search → LLM."""
         t_start = time.perf_counter()
@@ -85,6 +86,7 @@ class RAGRawHandler:
             collection_name=COLLECTION_NAME,
             query_vector=query_vec,
             limit=top_k,  # Raw không cần candidate pool lớn
+            payload_filter=filters,
         )
         search_ms = (time.perf_counter() - t_search) * 1000
 
@@ -134,13 +136,14 @@ class RAGRawHandler:
         top_k: int = 10,
         limit: int = 40,
         session_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Iterator[str]:
         """Streaming version của query()."""
         t_start = time.perf_counter()
         session_id = session_id or str(uuid.uuid4())
 
         query_vec = self.embedder.embed_text(query_text)
-        results = self.qdrant.search(COLLECTION_NAME, query_vec, limit=top_k)
+        results = self.qdrant.search(COLLECTION_NAME, query_vec, limit=top_k, payload_filter=filters)
 
         if not results:
             yield "[RAG-Raw] Không tìm thấy kết quả."

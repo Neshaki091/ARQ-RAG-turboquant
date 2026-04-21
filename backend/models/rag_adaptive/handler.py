@@ -90,6 +90,7 @@ class RAGAdaptiveHandler:
         top_k: Optional[int] = None,
         limit: Optional[int] = None,
         session_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Pipeline Adaptive RAG:
@@ -123,7 +124,7 @@ class RAGAdaptiveHandler:
         adc_table = pq.compute_adc_table(query_vec)
 
         t_retrieve = time.perf_counter()
-        candidates = self.qdrant.search(COLLECTION_NAME, query_vec, limit=effective_limit)
+        candidates = self.qdrant.search(COLLECTION_NAME, query_vec, limit=effective_limit, payload_filter=filters)
         retrieve_ms = (time.perf_counter() - t_retrieve) * 1000
 
         if not candidates:
@@ -193,6 +194,7 @@ class RAGAdaptiveHandler:
         top_k: Optional[int] = None,
         limit: Optional[int] = None,
         session_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Iterator[str]:
         """Streaming version của Adaptive RAG."""
         t_start = time.perf_counter()
@@ -205,7 +207,7 @@ class RAGAdaptiveHandler:
         query_vec = self.embedder.embed_text(query_text)
         pq = self._get_pq()
         adc_table = pq.compute_adc_table(query_vec)
-        candidates = self.qdrant.search(COLLECTION_NAME, query_vec, limit=effective_limit)
+        candidates = self.qdrant.search(COLLECTION_NAME, query_vec, limit=effective_limit, payload_filter=filters)
 
         if not candidates:
             yield "[Adaptive] Không tìm thấy kết quả."

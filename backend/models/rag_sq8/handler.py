@@ -86,6 +86,7 @@ class RAGSq8Handler:
         top_k: int = 10,
         limit: int = 40,
         session_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         t_start = time.perf_counter()
         session_id = session_id or str(uuid.uuid4())
@@ -95,7 +96,7 @@ class RAGSq8Handler:
 
         # Retrieval
         t_retrieve = time.perf_counter()
-        candidates = self.qdrant.search(COLLECTION_NAME, query_vec, limit=limit)
+        candidates = self.qdrant.search(COLLECTION_NAME, query_vec, limit=limit, payload_filter=filters)
         retrieve_ms = (time.perf_counter() - t_retrieve) * 1000
 
         if not candidates:
@@ -163,12 +164,13 @@ class RAGSq8Handler:
         top_k: int = 10,
         limit: int = 40,
         session_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Iterator[str]:
         t_start = time.perf_counter()
         session_id = session_id or str(uuid.uuid4())
 
         query_vec = self.embedder.embed_text(query_text)
-        candidates = self.qdrant.search(COLLECTION_NAME, query_vec, limit=limit)
+        candidates = self.qdrant.search(COLLECTION_NAME, query_vec, limit=limit, payload_filter=filters)
         if not candidates:
             yield "[RAG-SQ8] Không tìm thấy kết quả."
             return

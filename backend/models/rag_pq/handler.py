@@ -131,6 +131,7 @@ class RAGPQHandler:
         top_k: int = 10,
         limit: int = 40,
         session_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Thực thi full RAG-PQ pipeline và trả về kết quả.
@@ -169,6 +170,7 @@ class RAGPQHandler:
             collection_name=COLLECTION_NAME,
             query_vector=query_vec,
             limit=limit,
+            payload_filter=filters,
         )
         t_retrieve_ms = (time.perf_counter() - t_retrieve_start) * 1000
         retrieval_count = len(candidates)
@@ -279,6 +281,7 @@ class RAGPQHandler:
         top_k: int = 10,
         limit: int = 40,
         session_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Iterator[str]:
         """
         Streaming version của query() — yield từng token LLM ngay khi có.
@@ -296,6 +299,7 @@ class RAGPQHandler:
             collection_name=COLLECTION_NAME,
             query_vector=query_vec,
             limit=limit,
+            payload_filter=filters,
         )
 
         if not candidates:

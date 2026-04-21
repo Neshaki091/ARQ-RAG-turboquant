@@ -92,6 +92,7 @@ class ChatDispatcher:
         top_k: Optional[int] = None,
         limit: Optional[int] = None,
         session_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Xử lý truy vấn và trả về kết quả đầy đủ.
@@ -102,6 +103,7 @@ class ChatDispatcher:
             top_k: Số kết quả sau reranking (None = dùng default của model)
             limit: Số candidates từ Qdrant (None = dùng default)
             session_id: ID phiên chat
+            filters: Bộ lọc metadata Qdrant
 
         Returns:
             Dict với keys: answer, model, metrics, sources, session_id
@@ -125,6 +127,8 @@ class ChatDispatcher:
             kwargs["top_k"] = top_k
         if limit is not None:
             kwargs["limit"] = limit
+        if filters is not None:
+            kwargs["filters"] = filters
 
         return handler.query(**kwargs)
 
@@ -135,6 +139,7 @@ class ChatDispatcher:
         top_k: Optional[int] = None,
         limit: Optional[int] = None,
         session_id: Optional[str] = None,
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Iterator[str]:
         """
         Streaming version — yield từng token LLM.
@@ -154,6 +159,8 @@ class ChatDispatcher:
             kwargs["top_k"] = top_k
         if limit is not None:
             kwargs["limit"] = limit
+        if filters is not None:
+            kwargs["filters"] = filters
 
         yield from handler.query_stream(**kwargs)
 

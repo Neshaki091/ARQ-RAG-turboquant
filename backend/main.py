@@ -15,7 +15,7 @@ Endpoints:
 import logging
 import os
 import uuid
-from typing import AsyncIterator, Literal, Optional
+from typing import AsyncIterator, Literal, Optional, Dict, Any
 
 import uvicorn
 from dotenv import load_dotenv
@@ -85,6 +85,7 @@ class ChatRequest(BaseModel):
     top_k: Optional[int] = Field(default=None, ge=1, le=50, description="Số kết quả sau reranking")
     limit: Optional[int] = Field(default=None, ge=1, le=200, description="Số candidates từ Qdrant")
     session_id: Optional[str] = Field(default=None, description="ID phiên chat (UUID)")
+    filters: Optional[Dict[str, Any]] = Field(default=None, description="Bộ lọc metadata cho Qdrant (ví dụ: {'source': 'book1'})")
 
 
 class ChatResponse(BaseModel):
@@ -160,6 +161,7 @@ async def chat(req: ChatRequest):
             top_k=req.top_k,
             limit=req.limit,
             session_id=session_id,
+            filters=req.filters,
         )
         return ChatResponse(
             answer=result["answer"],
@@ -200,6 +202,7 @@ async def chat_stream(req: ChatRequest):
                 top_k=req.top_k,
                 limit=req.limit,
                 session_id=session_id,
+                filters=req.filters,
             ):
                 # SSE format: data: <content>\n\n
                 yield f"data: {token}\n\n"
