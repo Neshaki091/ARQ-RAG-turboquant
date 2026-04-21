@@ -68,20 +68,27 @@ def parse_pdf(pdf_path: Path) -> str:
         pages_text = []
 
         for page_num, page in enumerate(doc):
-            text = page.get_text("text")
+            # Sử dụng Document Layout Analysis: trích xuất theo blocks
+            blocks = page.get_text("blocks")
+            page_blocks = []
 
-            # Làm sạch cơ bản
-            text = text.replace("\x00", "")  # null bytes
-            text = "\n".join(
-                line for line in text.splitlines()
-                if len(line.strip()) > 3  # Bỏ dòng quá ngắn (header/footer/page number)
-            )
+            for b in blocks:
+                # b[6] là block_type: 0 = text, 1 = image
+                if b[6] == 0:
+                    text = b[4].strip()
+                    # Làm sạch cơ bản
+                    text = text.replace("\x00", "")
+                    
+                    # Lọc noise: bỏ các block quá ngắn (thường là header/footer/page number)
+                    if len(text) > 15:
+                        page_blocks.append(text)
 
-            if text.strip():
-                pages_text.append(f"[Page {page_num + 1}]\n{text}")
+            if page_blocks:
+                combined_page_text = f"[Page {page_num + 1}]\n" + "\n\n".join(page_blocks)
+                pages_text.append(combined_page_text)
 
         doc.close()
-        full_text = "\n\n".join(pages_text)
+        full_text = "\n\n---\n\n".join(pages_text)
         logger.info(f"Parsed {pdf_path.name}: {len(full_text)} chars, {len(doc)} pages")
         return full_text
 
