@@ -19,6 +19,14 @@
 - **Infra**: Docker Compose + Cloudflare Tunnel
 - **PQ Core**: faiss-cpu K-Means + numpy ADC lookup table
 
+## Các endpoints chính
+
+- `GET /health` : Trạng thái hệ thống và Qdrant
+- `GET /version` : Thông tin phiên bản (v1.0.0)
+- `GET /models` : Danh sách 5 models hỗ trợ
+- `POST /chat` : Xử lý chat cơ bản (kèm benchmark metrics)
+- `POST /chat/stream` : Chat streaming qua SSE theo thời gian thực
+
 ## Cài đặt
 
 ```bash
