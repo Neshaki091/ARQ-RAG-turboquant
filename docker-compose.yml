@@ -93,6 +93,24 @@ services:
     networks:
       - arq_net
 
+  # ----------------------------------------------------------
+  # Frontend: Next.js 15
+  # ----------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8000
+    container_name: arq_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - arq_net
+
 networks:
   arq_net:
     driver: bridge
