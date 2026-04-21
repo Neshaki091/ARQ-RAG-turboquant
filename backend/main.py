@@ -57,11 +57,30 @@ app.add_middleware(
 # ── Singleton Dispatcher ───────────────────────────────────────────────
 dispatcher: Optional[ChatDispatcher] = None
 
+def check_required_env():
+    """Kiểm tra các biến môi trường bắt buộc."""
+    required = [
+        "SUPABASE_URL",
+        "SUPABASE_KEY",
+        "GROQ_API_KEY",
+    ]
+    missing = [env for env in required if not os.getenv(env)]
+    if missing:
+        msg = f"❌ Thiếu biến môi trường bắt buộc: {', '.join(missing)}"
+        logger.error(msg)
+        # Trong thực tế có thể dùng raise SystemExit(1) nếu muốn dừng app hoàn toàn
+    return missing
 
 @app.on_event("startup")
 async def startup_event():
     global dispatcher
     logger.info("🚀 ARQ-RAG Backend đang khởi động...")
+    
+    # Kiểm tra env
+    missing = check_required_env()
+    if missing:
+        logger.warning("⚠️  Cảnh báo: Một số tính năng sẽ không hoạt động do thiếu credentials.")
+
     try:
         dispatcher = ChatDispatcher()
         logger.info("✅ Backend sẵn sàng!")
