@@ -33,7 +33,6 @@ def run_script(script_path):
     return result.stdout, end_time - start_time
 
 def generate_report():
-    # Use a different report name to avoid confusion
     report_file = "benchmark_report_alt.md"
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
@@ -43,7 +42,6 @@ def generate_report():
     
     print(f"Starting Comprehensive Benchmarking (Target: TQ_engine_lib)...")
     
-    # Run scripts from the eval_alt directory
     stress_output, stress_duration = run_script("eval_alt/stress_5m.py")
     recall_output, recall_duration = run_script("eval_alt/benchmark_recall.py")
     
@@ -68,7 +66,7 @@ def generate_report():
         f.write(f"- **Batch Sizes (TQ):** 4M (2bit), 1.5M (4bit)\n")
         f.write(f"- **Batch Sizes (SQ):** 4.3M (2bit), 2.1M (4bit)\n")
         f.write(f"- **Queries:** 5 queries per iteration (Stress), 50 queries (Recall)\n")
-        f.write(f"- **PQ Training:** Centroids trained on only **10,000** samples (Realistic scenario)\n\n")
+        f.write(f"- **PQ Configuration:** Custom training (10@start, 50@1k, 100@10k, 50@13k, 46@end | 20 iterations). M=96 (2b), M=192 (4b).\n\n")
         
         f.write(f"## 3. Performance Results (Stress Test 5M)\n")
         f.write("```text\n")
