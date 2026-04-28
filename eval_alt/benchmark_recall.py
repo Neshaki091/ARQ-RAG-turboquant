@@ -20,9 +20,7 @@ def measure_accuracy(predicted_indices, ground_truth_indices, k_values):
     
     for k in k_values:
         pred_set = set(predicted_indices[:k])
-        # Top-1 in K: Is the actual best result in the predicted Top-K?
         metrics["top1_in_k"][k] = 1.0 if gt_top1 in pred_set else 0.0
-        # Set Recall@K: How many of the actual Top-K are in the predicted Top-K?
         gt_set = set(ground_truth_indices[:k])
         metrics["set_recall"][k] = len(pred_set.intersection(gt_set)) / k if k > 0 else 0.0
         
@@ -59,19 +57,41 @@ def evaluate_sq(vectors, queries, ground_truth, k_values, bits=8):
 def evaluate_pq(vectors, queries, ground_truth, k_values, bits_per_dim=2):
     dim = vectors.shape[1]
     n_vectors = vectors.shape[0]
-    M = int(dim * bits_per_dim / 8)
+    
+    if bits_per_dim == 2:
+        M = 96
+    else:
+        M = 192
+        
     sub_dim = dim // M
-    TRAIN_SIZE = 10000
-    print(f"  PQ {bits_per_dim}-bit/dim (M={M}, sub_dim={sub_dim} | Training on {TRAIN_SIZE} samples)...")
+    print(f"  PQ {bits_per_dim}-bit/dim (M={M}, sub_dim={sub_dim} | Highly Fragmented Training: 256 samples, 20 iter)...")
     
     vectors_np = vectors.cpu().numpy()
     reconstructed = np.zeros_like(vectors_np)
     
-    # Training and Encoding
+    # NEW custom selection: 10 start, 50 at 1000, 100 at 10000, 50 at 13000, 46 end.
+    idx_list = [
+        np.arange(0, 50),
+        np.arange(350, 360),
+        np.arange(10000, 10100),
+        np.arange(13000, 13050),
+        np.arange(n_vectors - 46, n_vectors)
+    ]
+    valid_indices = [idx[idx < n_vectors] for idx in idx_list]
+    train_indices = np.concatenate(valid_indices).astype(int)
+    
+    # Training
     for m in range(M):
         sub = vectors_np[:, m*sub_dim : (m+1)*sub_dim]
-        sub_train = sub[:min(TRAIN_SIZE, n_vectors)]
-        kmeans = MiniBatchKMeans(n_clusters=256, n_init=1, max_iter=20, batch_size=2048, random_state=42).fit(sub_train)
+        sub_train = sub[train_indices]
+        
+        kmeans = MiniBatchKMeans(
+            n_clusters=256, 
+            n_init=1, 
+            max_iter=20, 
+            batch_size=256, 
+            random_state=42
+        ).fit(sub_train)
         indices = kmeans.predict(sub)
         reconstructed[:, m*sub_dim : (m+1)*sub_dim] = kmeans.cluster_centers_[indices]
         
@@ -123,7 +143,7 @@ def run_accuracy_benchmark():
     print("\n" + "="*95)
     print("TURBOQUANT COMPREHENSIVE RECALL: SQ vs PQ vs TQ (via TQ_engine_lib)")
     print("===============================================================================================")
-    print("Config: PQ centroids trained on 10,000 samples.")
+    print("Config: PQ trained on Highly Fragmented 256 samples (10@start, 50@1k, 100@10k, 50@13k, 46@end).")
     print("===============================================================================================")
 
     BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -153,8 +173,6 @@ def run_accuracy_benchmark():
         ground_truth.append(topk.cpu().tolist())
 
     results = []
-    
-    # Run all methods
     bit_modes = [2, 4]
     methods = ["SQ", "PQ", "TQ"]
     
@@ -197,8 +215,8 @@ def run_accuracy_benchmark():
         print(f"{res['label']:<12} | {recall_cols} | {res['qps']:>8.1f}")
     
     print("\n" + "="*110)
-    print("(*) PQ (Product Quantization) centroids trained on only 10,000 vectors for realistic scenario.")
-    print("(*) PQ search is simulated via full reconstruction in this script.")
+    print("(*) PQ trained on custom fragmented 256 samples (10@start, 50@1k, 100@10k, 50@13k, 46@end).")
+    print("(*) PQ configuration: M=96 for 2-bit, M=192 for 4-bit.")
 
 if __name__ == "__main__":
     run_accuracy_benchmark()
