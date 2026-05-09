@@ -1,0 +1,339 @@
+
+--- Page 1 ---
+ 
+TRƯỜNG ĐẠI HỌC GIAO THÔNG VẬN TẢI THÀNH PHỐ HỒ CHÍ MINH  
+VIỆN CÔNG NGHỆ THÔNG TIN VÀ ĐIỆN, ĐIỆN TỬ 
+🙦🙦&🙤🙤 
+  
+  
+  
+LUẬN VĂN TỐT NGHIỆP 
+ĐỀ TÀI:  
+NGHIÊN CỨU VÀ XÂY DỰNG HỆ THỐNG RAG THÍCH ỨNG VỚI TRUY 
+XUẤT LƯỢNG TỬ HÓA TRỰC TUYẾN (ARQ-RAG)  
+NGÀNH: CÔNG NGHỆ THÔNG TIN 
+CHUYÊN NGÀNH: CÔNG NGHỆ THÔNG TIN 
+  
+  
+NGƯỜI HƯỚNG DẪN  
+SINH VIÊN THỰC HIỆN:  
+Ths. Nguyễn Văn Chiến  
+Huỳnh Công Luyện; MSSV: 2251120223 
+ 
+Nguyễn Đình Mạnh;  MSSV: 2251120226  
+  
+  
+  
+  
+  
+  
+  
+  
+ 
+ 
+  
+TP.HỒ CHÍ MINH, Năm 2026  
+
+--- Page 2 ---
+ 
+CHƯƠNG 1: GIỚI THIỆU 
+1.1. 
+Đặt vấn đề và Thực trạng  
+Sự phát triển bùng nổ của các Mô hình ngôn ngữ lớn (LLMs) đã thúc đẩy mạnh mẽ 
+các hệ thống Hỏi đáp tăng cường truy xuất (RAG), cho phép mô hình tạo ra câu trả lời 
+chính xác dựa trên kho tri thức khổng lồ bên ngoài. Đối với một cơ sở dữ liệu học 
+thuật lớn (ví dụ: hàng trăm ngàn bài báo Machine Learning), nền tảng cốt lõi của RAG 
+là việc tìm kiếm lân cận gần nhất (Nearest Neighbor Search) trong không gian vector 
+đa chiều [1]. Tuy nhiên, việc triển khai RAG trên các thiết bị giới hạn tài nguyên (Edge 
+devices) hiện đang vấp phải những "nút thắt cổ chai" nghiêm trọng về phần cứng lưu 
+trữ và tìm kiếm: 
+ 
+Sự cạn kiệt bộ nhớ (Memory Wall) của Vector Database: Các vector nhúng 
+(embeddings) biểu diễn văn bản thường có số chiều rất lớn (ví dụ: 1536 hoặc 
+3072 chiều) [1]. Việc lưu trữ hàng triệu vector này ở định dạng thực chuẩn 
+Float32 tiêu tốn một lượng khổng lồ VRAM/RAM, gây ra độ trễ lớn khi tính 
+toán truy xuất và vượt quá khả năng của các thiết bị biên. 
+ 
+Điểm yếu của các thuật toán nén hiện tại: Để giảm dung lượng RAM, các hệ 
+thống Vector Database hiện hành thường dùng thuật toán Lượng tử hóa Tích 
+(Product Quantization - PQ) [1]. Tuy nhiên, PQ là phương pháp phụ thuộc dữ 
+liệu (data-dependent), bắt buộc phải quét qua toàn bộ dữ liệu để chạy thuật toán 
+phân cụm (như K-Means) nhằm xây dựng bảng mã [1]. Điều này khiến thời gian 
+lập chỉ mục (indexing time) trở nên cực kỳ chậm chễ, làm cho hệ thống RAG 
+không thể nạp và cập nhật tri thức mới theo thời gian thực (online) [1]. Thêm vào 
+đó, ở các mức nén sâu, PQ thường làm suy giảm độ chính xác truy xuất 
+(Recall@K) một cách đáng kể. 
+1.2. 
+Mục tiêu và Phạm vi nghiên cứu  
+Đề tài hướng tới mục tiêu thiết kế một hệ thống RAG mang tên ARQ-RAG (Adaptive 
+Retrieval with Quantization) nhằm khắc phục triệt để sự cạn kiệt phần cứng bằng công 
+nghệ Truy xuất Lượng tử Trực tuyến (Online Vector Quantization). 
+Phạm vi của đề tài tập trung hoàn toàn vào việc xây dựng và can thiệp sâu vào lõi lưu 
+trữ và truy xuất vector (Retrieval Engine). Đề tài không can thiệp vào mã nguồn hay 
+kiến trúc nội bộ của LLM, mà sử dụng thuật toán lượng tử hóa "mù dữ liệu" (data-
+oblivious) thế hệ mới (TurboQuant) để nén cơ sở dữ liệu tri thức ngoài. Lõi truy xuất 
+này sẽ đóng vai trò như một bộ lọc siêu tốc, cung cấp ngữ cảnh (Top-K documents) 
+chính xác tuyệt đối cho LLM sinh văn bản. 
+ 
+ 
+
+--- Page 3 ---
+ 
+1.3. 
+Đóng góp của đề tài  
+Đề tài tái định hình cách thức các hệ thống RAG lưu trữ và tìm kiếm dữ liệu lớn trên 
+phần cứng hạn chế, mang lại các đóng góp thiết thực sau: 
+ 
+Về kiến trúc (Zero-delay Indexing RAG): Đề xuất kiến trúc Vector Database 
+hoạt động trực tuyến. Bằng cách loại bỏ hoàn toàn sự phụ thuộc vào quá trình 
+huấn luyện bảng mã K-Means của PQ, hệ thống cho phép lượng tử hóa và lập 
+chỉ mục dữ liệu học thuật mới ngay lập tức (thời gian indexing gần như bằng 0) 
+[1]. Điều này giúp ARQ-RAG luôn được cập nhật tri thức theo thời gian thực 
+(Streaming Ingestion). 
+ 
+Về thuật toán (Near-optimal Distortion Rate): Ứng dụng đột phá kiến trúc 
+lượng tử hóa hai giai đoạn: kết hợp Lượng tử hóa vô hướng tối ưu sai số (MSE) 
+với biến đổi trực giao QJL 1-bit để bù trừ phần dư [1]. Hệ thống giúp nén ép 
+dung lượng bộ nhớ (Memory Footprint) xuống gấp nhiều lần (chỉ còn khoảng 2 
+đến 4 bit cho mỗi tọa độ), nhưng vẫn tạo ra các ước lượng tích vô hướng không 
+bị lệch (unbiased estimator) [1]. Kết quả là hệ thống đánh bại hoàn toàn các 
+phương pháp PQ và RabitQ truyền thống về độ chính xác (Recall@K) [1]. 
+ 
+Về thực tiễn: Chứng minh tính khả thi của việc vận hành một hệ thống Tìm 
+kiếm lân cận gần nhất (Nearest Neighbor Search) quy mô hàng triệu vector với 
+tốc độ siêu tốc trên RAM giới hạn, mở đường cho việc triển khai AI học thuật 
+mạnh mẽ lên các thiết bị phần cứng cá nhân. 
+ 
+ 
+ 
+
+--- Page 4 ---
+ 
+CHƯƠNG 2 : KHẢO SÁT CÁC NGHIÊN CỨU LIÊN QUAN 
+2.1. Khảo sát các nghiên cứu liên quan (Literature Matrix) 
+Các giải pháp đã được công bố trên thế giới để xác định khoảng trống nghiên cứu 
+(Research Gap) và làm cơ sở thiết kế mô hình thực nghiệm: 
+Hướng nghiên 
+cứu 
+Các công 
+trình tiêu 
+biểu 
+Ưu điểm (Đã làm được gì) 
+Hạn chế (Vấn đề 
+gặp phải) 
+Truy xuất 
+Thích ứng 
+(Adaptive 
+RAG) 
+Self-RAG 
+(Asai et 
+al., 2023),  
+Tự động đánh giá và quyết 
+định luồng truy xuất. Cải 
+thiện mạnh mẽ độ liên quan 
+(Answer Relevance) và 
+giảm ảo giác.0  
+Tiêu tốn cực kỳ 
+nhiều tài nguyên tính 
+toán. Không giải 
+quyết bài toán cạn 
+kiệt VRAM do lưu 
+trữ vector gốc. 
+Lượng tử hóa 
+Tích (Product 
+Quantization - 
+PQ) 
+FAISS 
+(Jégou et 
+al., 2011) 
+Nén mạnh dung lượng 
+Index, tăng tốc độ quét 
+vector lên hàng chục lần.[4] 
+Tối ưu hóa cho 
+khoảng cách hình 
+học, gây sai lệch lớn 
+(bias) khi LLM tính 
+Tích vô hướng, làm 
+giảm độ chính xác 
+ngữ cảnh. 
+Lượng tử hóa 
+Vô hướng 
+(Scalar 
+Quantization - 
+SQ8) 
+OpenAI, 
+Cohere, 
+Qdrant 
+Nén trực tiếp Float32 xuống 
+Int8, dễ triển khai, độ mất 
+mát thông tin ở mức chấp 
+nhận được.Error! Reference source 
+not found. 
+Tỷ lệ nén chỉ dừng ở 
+mức 4 lần (vẫn lớn 
+với dữ liệu hàng triệu 
+document). 
+Lượng tử hóa 
+bảo toàn Tích 
+vô hướng 
+ScaNN 
+(Guo et 
+al., 
+Google, 
+2020) 
+Tối ưu hóa lượng tử hóa 
+theo hướng (anisotropic) để 
+bảo toàn giá trị Tích vô 
+hướng, giữ nguyên chất 
+lượng xếp hạng 
+(Reranking).Error! Reference 
+source not found. 
+Yêu cầu quá trình 
+hiệu chỉnh 
+(calibration) phức tạp 
+trước khi nén, khó 
+chạy trực tuyến 
+(Online). 
+Khoảng trống nghiên cứu: Đề tài đề xuất kiến trúc ARQ-RAG nhằm lấp đầy khoảng 
+trống này bằng cách kết hợp sự linh hoạt của luồng Adaptive RAG và cơ chế nén bảo 
+toàn điểm số trực tuyến (Calibration-free) của TurboQuant. 
+
+--- Page 5 ---
+ 
+ 
+ 
+
+--- Page 6 ---
+ 
+CHƯƠNG 3: MÔ HÌNH ĐỀ XUẤT ARQ-RAG 
+Thiết kế các mô hình thực nghiệm đối chứng 
+Để đánh giá định lượng hiệu quả của phương pháp ARQ-RAG đề xuất, nghiên cứu 
+tiến hành xây dựng và so sánh 5 biến thể hệ thống trên cùng một tập dữ liệu 1,000 bài 
+báo khoa học ML/LLM: 
+ 
+RAG-RAW (Baseline gốc): Sử dụng Vector nguyên bản (Float32) và truy xuất 
+Top_K cố định.  
+ 
+RAG-Adaptive (Tối ưu luồng): Sử dụng Vector nguyên bản (Float32), tích 
+hợp Dynamic Top_K và cơ chế xếp hạng lại (Reranking).0 
+ 
+RAG-PQ (Tối ưu lưu trữ cũ): Sử dụng thuật toán Product Quantization (PQ) 
+để ép dung lượng, hy sinh độ chính xác nhưng bù lại về tốc độ.Error! Reference source 
+not found. 
+ 
+RAG-SQ8 (Tối ưu lưu trữ chuẩn công nghiệp): Sử dụng Scalar Quantization 
+8-bit (SQ8) để giảm 4 lần dung lượng bộ nhớ.Error! Reference source not found. 
+ 
+ARQ-RAG (Mô hình đề xuất): Tích hợp thuật toán nén cực độ TurboQuant 
+(nén 3-4 bit) kết hợp cơ chế định tuyến linh hoạt (Adaptive Routing) để điều 
+phối truy xuất thông minh.Error! Reference source not found. 
+ 
+ 
+
+--- Page 7 ---
+ 
+CHƯƠNG 5: KẾT QUẢ THỰC NGHIỆM 
+5.1. Khung đánh giá chất lượng nội dung (RAGAS Metrics) Nghiên cứu sử dụng 
+framework RAGAS (Retrieval Augmented Generation Assessment) để đo lường tự 
+động và khách quan chất lượng sinh văn bản từ LLM. Các chỉ số bao gồm: 
+ 
+Context Precision (Độ chính xác ngữ cảnh): Đo lường tỷ lệ các đoạn văn bản 
+(chunks) hữu ích được xếp hạng ở các vị trí đầu. Chỉ số này dùng để kiểm 
+chứng sức mạnh của bộ định tuyến Adaptive. 
+ 
+Context Recall (Độ phủ ngữ cảnh): Đánh giá xem hệ thống có lấy đủ thông 
+tin cần thiết để giải quyết trọn vẹn câu hỏi hay không. 
+5.2 Khung đánh giá hiệu năng phần cứng (System Metrics) Nhằm chứng minh tính 
+khả thi khi chạy trên điện toán biên, nghiên cứu cấu hình các công cụ đo lường tài 
+nguyên hệ thống (Profiler) cho 3 chỉ số thiết yếu: 
+ 
+Peak Memory Usage (MB): Lượng RAM/VRAM tối đa hệ thống cấp phát tại 
+thời điểm chịu tải cao nhất. 
+ 
+Search Latency (ms): Thời gian trễ từ khi phát lệnh truy xuất đến khi Vector 
+DB trả về tập tài liệu Top_K. 
+ 
+Index Size (MB): Tổng dung lượng thực tế của bộ chỉ mục lưu trữ trên ổ đĩa 
+sau khi các thuật toán lượng tử hóa hoàn tất quá trình nén. 
+5.3. Quy trình thực nghiệm và Phân tích đánh đổi (Trade-off Analysis) Thực 
+nghiệm được tự động hóa thông qua kịch bản kiểm thử áp lực (Stress Test) bằng công 
+cụ (ví dụ: Locust/JMeter) trên tập Test Suite gồm 100 câu hỏi chuyên sâu. Tải lượng 
+sẽ được cấu hình chạy song song (Concurrency) tăng dần theo các mốc: 1, 5, 10, 20, 
+50, 100 truy vấn đồng thời nhằm đo lường điểm tràn bộ nhớ (Out-of-Memory) của 
+từng kiến trúc. 
+Từ dữ liệu thu thập được, nghiên cứu sẽ phân tích hai điểm đánh đổi (Trade-off) cốt 
+lõi: 
+ 
+Hiệu suất vs. Độ chính xác: Chứng minh kỹ thuật TurboQuant trong ARQ-
+RAG có thể thu gọn dung lượng RAM gấp nhiều lần so với RAG-RAW mà độ 
+suy giảm chỉ số RAGAS (Faithfulness, Context Precision) nằm trong biên độ 
+sai số cho phép. 
+ 
+Tốc độ vs. Chi phí Token: Đánh giá xem sự gia tăng độ trễ (Search Latency) 
+do bộ xử lý Adaptive có được bù đắp xứng đáng bằng việc tiết kiệm chi phí số 
+lượng token đầu vào (Input Tokens) nhờ vào luồng ngữ cảnh đã được lọc sạch 
+nhiễu hay không. 
+ 
+ 
+ 
+
+--- Page 8 ---
+ 
+CHƯƠNG 6: KẾT LUẬN  
+(Chưa có kết quả thực nghiệm để kết luận) 
+
+--- Page 9 ---
+ 
+PHỤ LỤC 
+Tài liệu tham khảo: 
+ 
+ 
+[1
+]  
+Amir Zandieh, Majid Daliri, Majid Hadian, Vahab Mirrokni, “TurboQuant: Online Vector 
+Quantization with Near-optimal Distortion Rate,” 28 Apr 2025. [Trực tuyến]. Available: 
+https://arxiv.org/pdf/2504.19874. 
+[2
+]  
+Ruiqi Guo, Philip Sun, Erik Lindgren, Quan Geng, David Simcha, Felix Chern, Sanjiv Kumar, 
+“Accelerating Large-Scale Inference with Anisotropic Vector,” 4 Dec 2020. [Trực tuyến]. 
+Available: https://arxiv.org/pdf/1908.10396. 
+[3
+]  
+Amir Zandieh, Majid Daliri, Insu Han, “QJL: 1-Bit Quantized JL Transform for KV Cache 
+Quantization,” 18 Jul 2024. [Trực tuyến]. Available: https://arxiv.org/pdf/2406.03482. 
+[4
+]  
+Akari Asai, Zeqiu Wu, Yizhong Wang, Avirup Sil, Hannaneh Hajishirzi, “Self-RAG: Learning to 
+Retrieve, Generate, and Critique through Self-Reflection,” 17 Oct 2023. [Trực tuyến]. Available: 
+https://arxiv.org/pdf/2310.11511. 
+[5
+]  
+Insu Han, Praneeth Kacham, Amin Karbasi, Vahab Mirrokni, Amir Zandieh, “PolarQuant: 
+Quantizing KV Caches with Polar Transformation,” 4 Feb 2025. [Trực tuyến]. Available: 
+https://arxiv.org/pdf/2502.02617. 
+[6
+]  
+Herv´e J´egou, Matthijs Douze, Cordelia Schmid, “Product quantization for nearest neighbor 
+search,” 2011. [Trực tuyến]. Available: 
+https://www.researchgate.net/publication/47815472_Product_Quantization_for_Nearest_Neigh
+bor_Search. 
+[7
+]  
+Qdrant, “Qdrant Document - Scalar Quantization,” [Trực tuyến]. Available: 
+https://qdrant.tech/documentation/manage-data/quantization/. 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+ 
+
+--- Page 10 ---
+ 
+ 

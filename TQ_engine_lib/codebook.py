@@ -70,6 +70,12 @@ class ScalarQuantizer:
         else:
             subset = data_flat
 
+        # LƯỢNG TỬ HÓA CẢI TIẾN: Percentile Clipping (Cách 3)
+        # Cắt bỏ 1% giá trị dị biệt ở hai đầu để chống nhiễu (outliers), giúp độ phân giải 4-bit tốt hơn
+        q_low = torch.quantile(subset, 0.01)
+        q_high = torch.quantile(subset, 0.99)
+        subset = torch.clamp(subset, q_low, q_high)
+
         # 1. Khởi tạo Centroids bằng Quantiles (Gần với tối ưu Gaussian ngay từ đầu)
         p = torch.linspace(0, 1, self.n_clusters + 1, device=self.device)
         p_mid = (p[:-1] + p[1:]) / 2
@@ -145,13 +151,13 @@ class ScalarQuantizer:
         bit_mask = (1 << bits) - 1
         
         if vals_per_byte > 1:
-            indices = np.zeros((n, self.dim), dtype=np.int64)
+            indices = np.zeros((n, self.dim), dtype=np.uint8)
             for i in range(vals_per_byte):
                 # Unpack
                 subset = (codes_np >> (i * bits)) & bit_mask
                 # i::vals_per_byte unpacking
                 indices[:, i::vals_per_byte] = subset[:, :((self.dim - i + vals_per_byte - 1) // vals_per_byte)]
             
-            indices_t = torch.from_numpy(indices).to(self.device)
+            indices_t = torch.from_numpy(indices).to(self.device).long()
             return self.centroids[indices_t]
         
