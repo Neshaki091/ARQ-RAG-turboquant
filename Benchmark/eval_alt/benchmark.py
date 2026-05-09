@@ -986,7 +986,9 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
         cols = " | ".join([f"{res['recall'][k]:5.1f}%" for k in k_values])
         print(f"{res['label']:<28} | {cols} | {res['qps']:>8.1f} | {res.get('ram_mb', 0):>8.0f}")
 
-    out_json = os.path.join(data_dir, "benchmark_results.json")
+    out_dir = os.path.join(project_root, "benchmark_result")
+    os.makedirs(out_dir, exist_ok=True)
+    out_json = os.path.join(out_dir, "benchmark_results.json")
     serializable = []
     for r in results:
         serializable.append(

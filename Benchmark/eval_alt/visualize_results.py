@@ -10,9 +10,10 @@ plt.rcParams['font.family'] = 'DejaVu Sans'
 plt.rcParams['figure.figsize'] = (12, 8)
 
 # Đường dẫn file
-DATA_DIR = os.path.join("Benchmark", "data", "wiki_benchmark")
-JSON_PATH = os.path.join(DATA_DIR, "benchmark_results.json")
-OUTPUT_DIR = os.path.join(DATA_DIR, "charts")
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+BENCHMARK_RESULT_DIR = os.path.join(PROJECT_ROOT, "benchmark_result")
+JSON_PATH = os.path.join(BENCHMARK_RESULT_DIR, "benchmark_results.json")
+OUTPUT_DIR = os.path.join(BENCHMARK_RESULT_DIR, "charts")
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def load_data():
