@@ -121,16 +121,16 @@ Các biểu đồ sau đây minh họa sức mạnh của TurboQuant:
 #### 1. Biểu đồ Độ chính xác (Accuracy Curves)
 | Top-1 Probability (2-bit) | Top-1 Probability (4-bit) |
 | :---: | :---: |
-| ![Top-1 2b](./Benchmark/data/wiki_benchmark/charts/top1_2b.png) | ![Top-1 4b](./Benchmark/data/wiki_benchmark/charts/top1_4b.png) |
+| ![Top-1 2b](./benchmark_result/charts/top1_2b.png) | ![Top-1 4b](./benchmark_result/charts/top1_4b.png) |
 
 | Set Recall@K (2-bit) | Set Recall@K (4-bit) |
 | :---: | :---: |
-| ![Recall 2b](./Benchmark/data/wiki_benchmark/charts/recall_2b.png) | ![Recall 4b](./Benchmark/data/wiki_benchmark/charts/recall_4b.png) |
+| ![Recall 2b](./benchmark_result/charts/recall_2b.png) | ![Recall 4b](./benchmark_result/charts/recall_4b.png) |
 
 #### 2. Biểu đồ Hiệu năng (Efficiency)
 Biểu đồ này so sánh trực tiếp cán cân giữa **Tốc độ (QPS)** và **Bộ nhớ (RAM)**. Lưu ý cột RAM của FAISS cao vọt và gây lỗi OOM ở quy mô lớn, trong khi TQ giữ mức RAM gần như không đổi.
 
-![Efficiency Comparison](./Benchmark/data/wiki_benchmark/charts/efficiency_comparison.png)
+![Efficiency Comparison](./benchmark_result/charts/efficiency_comparison.png)
 
 **Kết luận từ biểu đồ:**
 - **TQ-IVF (np=64)** đạt độ chính xác tương đương FAISS-PQ nhưng sử dụng RAM ít hơn **~80 lần**.
