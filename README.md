@@ -66,14 +66,14 @@ python scripts/cloud/re_quantize.py
 
 Hệ thống lõi đã trải qua bài kiểm tra chịu tải cực hạn (Stress Test) trên tập dữ liệu `facebook/wiki_dpr` quy mô **5 triệu vectors (768 chiều)**. Kết quả thực nghiệm (`benchmark_results.json`) đã chứng minh tính ưu việt tuyệt đối của TurboQuant (TQ-IVF) trong điện toán biên:
 
-| Thuật toán | Mật độ nén | RAM Tiêu thụ (Peak) | Trạng thái (Scale 5M+) |
-| :--- | :--- | :--- | :--- |
-| **FAISS-SQ** | 4-bit | ~ 1.86 GB | ⚠️ Dễ lỗi OOM (Memory Wall) |
-| **FAISS-PQ** | 4-bit | ~ 1.87 GB | ⚠️ Dễ lỗi OOM (Memory Wall) |
-| **TQ-IVF** | 4-bit | **~ 12.06 MB** | ✅ Ổn định (Zero-Copy mmap) |
-| **TQ-IVF** | 2-bit | **~ 15.61 MB** | ✅ Ổn định (Zero-Copy mmap) |
+| Thuật toán | Mật độ nén | Private RAM (Mandatory) | Working Set (Max Cache) | Trạng thái (Scale 5M+) |
+| :--- | :--- | :--- | :--- | :--- |
+| **FAISS-SQ** | 4-bit | ~ 1,867 MB | 1,867 MB | ⚠️ OOM Risk (Memory Wall) |
+| **FAISS-PQ** | 4-bit | ~ 1,873 MB | 1,873 MB | ⚠️ OOM Risk (Memory Wall) |
+| **TQ-IVF** | 4-bit | **~ 12.0 MB** | ~ 1,334 MB | ✅ Ổn định (Zero-Copy) |
+| **TQ-IVF** | 2-bit | **~ 16.0 MB** | ~ 554 MB | ✅ Ổn định (Zero-Copy) |
 
-> **⚠️ Lưu ý cực kỳ quan trọng:** Mặc dù FAISS có thể chạy được ở quy mô 5 triệu vector trên máy có 16GB RAM, nhưng nó sẽ **ngay lập tức gây lỗi OOM (std::bad_alloc)** nếu quy mô dữ liệu tăng lên 50 triệu hoặc 100 triệu vector (đòi hỏi hàng trăm GB RAM vật lý). Trong khi đó, **TurboQuant** vẫn duy trì mức RAM cực thấp (~12MB) nhờ cơ chế `mmap`, cho phép xử lý dữ liệu khổng lồ mà không cần nâng cấp phần cứng.
+> **⚠️ Lưu ý cực kỳ quan trọng:** **Private RAM** là lượng bộ nhớ ứng dụng bắt buộc phải chiếm giữ để hoạt động (không thể giải phóng). **Working Set** bao gồm cả Page Cache mà Hệ điều hành tự động mượn để tăng tốc. TurboQuant chỉ cần ~12MB Private RAM để sống, trong khi các thư viện In-memory như FAISS đòi hỏi toàn bộ dữ liệu phải nằm trong Private RAM (1.8GB), dẫn đến lỗi OOM (std::bad_alloc) nếu bộ nhớ vật lý bị giới hạn.
 
 ### 📈 Chi tiết Độ chính xác (Accuracy Metrics)
 

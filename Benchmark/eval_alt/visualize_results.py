@@ -72,62 +72,68 @@ def plot_accuracy(data, bit_mode, metric_type):
 
 def plot_efficiency(data):
     """
-    Vẽ biểu đồ so sánh QPS và RAM (Bar chart)
+    Vẽ biểu đồ so sánh QPS và Private RAM (Bar chart + Line)
     """
     labels = []
     qps_values = []
-    ram_values = []
+    priv_values = []
+    rss_values = []
     
     # 1. Lấy tất cả các mẫu FAISS có trong JSON
     faiss_results = [r for r in data["results"] if "FAISS" in r["label"]]
     for r in faiss_results:
         labels.append(r["label"])
         qps_values.append(r["qps"])
-        ram_values.append(r["ram_mb"])
+        priv_values.append(r.get("priv_mb", 0.0))
+        rss_values.append(r.get("rss_mb", 0.0))
 
     # 2. Lấy các mẫu TQ tiêu biểu (np=64)
     tq_samples = [r for r in data["results"] if "np64" in r["label"] and "nl4096" in r["label"]]
     for r in tq_samples:
-        labels.append(r["label"].replace("nl4096 ", "")) # Rút gọn nhãn
+        labels.append(r["label"].replace("nl4096 ", ""))
         qps_values.append(r["qps"])
-        ram_values.append(r["ram_mb"])
+        priv_values.append(r.get("priv_mb", 0.0))
+        rss_values.append(r.get("rss_mb", 0.0))
 
-    # Vẽ biểu đồ Dual Axis
+    # Vẽ biểu đồ Dual Axis cho QPS và Private RAM
     fig, ax1 = plt.subplots(figsize=(14, 8))
-
     color_qps = 'tab:blue'
     ax1.set_xlabel('Model Configuration', fontsize=12, fontweight='bold')
     ax1.set_ylabel('Throughput (QPS)', color=color_qps, fontsize=12, fontweight='bold')
-    
-    # Vẽ cột QPS
     bars = ax1.bar(labels, qps_values, color=color_qps, alpha=0.6, width=0.5, label='QPS')
     ax1.tick_params(axis='y', labelcolor=color_qps)
-    
-    # Thêm số liệu QPS
     for bar in bars:
         height = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2., height + 5, f'{height:.1f}', ha='center', va='bottom', color=color_qps, fontweight='bold')
 
     ax2 = ax1.twinx()
-    color_ram = 'tab:red'
-    ax2.set_ylabel('Peak RAM (MB)', color=color_ram, fontsize=12, fontweight='bold')
-    
-    # Vẽ đường RAM
-    ax2.plot(labels, ram_values, color=color_ram, marker='D', markersize=10, linewidth=3, label='RAM')
-    ax2.tick_params(axis='y', labelcolor=color_ram)
-    
-    # Thêm số liệu cho RAM
-    for i, txt in enumerate(ram_values):
-        ax2.annotate(f'{txt:.1f} MB', (labels[i], ram_values[i]), textcoords="offset points", xytext=(0,10), ha='center', color=color_ram, fontweight='bold')
+    color_priv = 'tab:green'
+    ax2.set_ylabel('Mandatory Private RAM (MB)', color=color_priv, fontsize=12, fontweight='bold')
+    ax2.plot(labels, priv_values, color=color_priv, marker='D', markersize=10, linewidth=3, label='Private RAM')
+    ax2.tick_params(axis='y', labelcolor=color_priv)
+    for i, txt in enumerate(priv_values):
+        ax2.annotate(f'{txt:.1f} MB', (labels[i], priv_values[i]), textcoords="offset points", xytext=(0,10), ha='center', color=color_priv, fontweight='bold')
 
-    plt.title("QPS vs Memory Usage (Real Benchmark Data)", fontsize=16, fontweight='bold', pad=20)
+    plt.title("QPS vs Private Memory Usage (The 'Memory Wall' Proof)", fontsize=16, fontweight='bold', pad=20)
     plt.xticks(rotation=15)
     fig.tight_layout()
-    
-    file_name = "efficiency_comparison.png"
-    plt.savefig(os.path.join(OUTPUT_DIR, file_name), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(OUTPUT_DIR, "efficiency_comparison.png"), dpi=300, bbox_inches='tight')
     plt.close()
-    print(f"Saved: {file_name}")
+
+    # Vẽ biểu đồ phụ so sánh Private vs Working Set (RSS)
+    plt.figure(figsize=(12, 6))
+    x = np.arange(len(labels))
+    width = 0.35
+    plt.bar(x - width/2, priv_values, width, label='Private (Mandatory)', color='tab:green', alpha=0.8)
+    plt.bar(x + width/2, rss_values, width, label='Working Set (Inc. Cache)', color='tab:orange', alpha=0.8)
+    plt.ylabel('Memory Usage (MB)')
+    plt.title('Memory Architecture: Private Allocation vs. OS Page Cache')
+    plt.xticks(x, labels, rotation=15)
+    plt.legend()
+    plt.savefig(os.path.join(OUTPUT_DIR, "ram_architecture_comparison.png"), dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    print("Saved efficiency and architecture charts.")
 
 if __name__ == "__main__":
     if not os.path.exists(JSON_PATH):

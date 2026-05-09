@@ -61,10 +61,58 @@ def measure_accuracy(predicted_indices, ground_truth_indices, k_values):
     return metrics
 
 
-def rss_mb() -> float:
+import ctypes
+
+def get_ram_info():
+    """Trả về (Private_MB, WorkingSet_MB)"""
     if psutil is None:
-        return 0.0
-    return psutil.Process(os.getpid()).memory_info().rss / (1024 * 1024)
+        return 0.0, 0.0
+    p = psutil.Process(os.getpid())
+    info = p.memory_info()
+    # Private Bytes là RAM thực sự ứng dụng chiếm giữ
+    # RSS (Working Set) là RAM bao gồm cả Page Cache (mmap)
+    return info.private / (1024 * 1024), info.rss / (1024 * 1024)
+
+def rss_mb():
+    # Giữ lại hàm này để tương thích, trả về RSS
+    _, rss = get_ram_info()
+    return rss
+
+def empty_working_set():
+    """Ép Windows thu hồi lại toàn bộ RAM 'mượn' (Page Cache)"""
+    if os.name == 'nt':
+        try:
+            handle = ctypes.windll.kernel32.GetCurrentProcess()
+            # Giảm Working Set xuống mức tối thiểu (-1, -1)
+            ctypes.windll.kernel32.SetProcessWorkingSetSize(handle, -1, -1)
+        except:
+            pass
+
+def enforce_memory_limit(limit_mb: int):
+    """Thiết lập giới hạn RAM cứng thực thụ cho tiến trình hiện tại trên Windows"""
+    if os.name == 'nt' and limit_mb > 0:
+        try:
+            limit_bytes = limit_mb * 1024 * 1024
+            handle = ctypes.windll.kernel32.GetCurrentProcess()
+            
+            # Các cờ ép buộc giới hạn cứng:
+            # QUOTA_LIMITS_HARDWS_MIN_ENABLE = 0x2
+            # QUOTA_LIMITS_HARDWS_MAX_ENABLE = 0x4
+            flags = 0x2 | 0x4 
+            
+            # Sử dụng SetProcessWorkingSetSizeEx (yêu cầu quyền truy cập phù hợp)
+            res = ctypes.windll.kernel32.SetProcessWorkingSetSizeEx(
+                handle, 
+                1024 * 1024, # Tối thiểu 1MB
+                limit_bytes, # Tối đa X MB
+                flags
+            )
+            if res != 0:
+                print(f"--- [!!!] ĐÃ THIẾT LẬP GIỚI HẠN RAM CỨNG: {limit_mb} MB ---")
+            else:
+                print("--- [!] Cảnh báo: Windows từ chối áp dụng giới hạn cứng. ---")
+        except Exception as e:
+            print(f"Không thể thiết lập giới hạn RAM: {e}")
 
 
 def max_vectors_for_ram(dim: int, max_ram_gb: float, reserve: float = 0.72) -> int:
@@ -633,6 +681,9 @@ def load_vectors_torch(corpus_mm: np.memmap, chunk_rows: int) -> torch.Tensor:
 
 
 def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
+    if args.hard_limit_mb > 0:
+        enforce_memory_limit(args.hard_limit_mb)
+        
     k_values = [int(x) for x in args.k_values.split(",")]
     nprobe_list = [int(x) for x in args.tq_nprobes.split(",")]
     tq_rerank_mult = max(1, int(args.tq_rerank_mult))
@@ -856,52 +907,62 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
     for bits in bit_modes:
         for nlist in tq_nlists:
             tq_path = os.path.join(data_dir, f"tq_index_{bits}b_nl{nlist}")
-            gc.collect()
-            ram_before = rss_mb()
-            engine = TQEngine(dim=dim, bits=bits, device="cpu", use_ivf=True, ivf_nlist=nlist)
-            engine.load_index(tq_path)
-            ram_tq = max(0.0, rss_mb() - ram_before)
-            
-            for nprobe in nprobe_list:
-                engine.ivf_nprobe = nprobe
-                print(f"Evaluating TQ-IVF {bits}b (nlist={nlist}, nprobe={nprobe}, rerank_mult={tq_rerank_mult})...")
-                start_t = time.time()
-                retrieve_k = max(k_values) * tq_rerank_mult
-                tq_results = engine.search_batch(queries_t, top_k=retrieve_k)
-                qps = len(queries_t) / (time.time() - start_t)
+            if os.path.exists(tq_path):
+                # Lưu mốc RAM trước khi nạp mô hình
+                priv_before, rss_before = get_ram_info()
                 
-                I = np.zeros((len(queries_t), max(k_values)), dtype=np.int64)
-                for i, (ids, _) in enumerate(tq_results):
-                    candidate_ids = ids.cpu().numpy().astype(np.int64, copy=False)
-                    candidate_ids = candidate_ids[candidate_ids >= 0]
-                    if candidate_ids.size == 0:
-                        continue
+                engine = TQEngine(dim=dim, bits=bits, device="cpu", use_ivf=True, ivf_nlist=nlist)
+                engine.load_index(tq_path)
+                
+                for nprobe in nprobe_list:
+                    engine.ivf_nprobe = nprobe
+                    print(f"Evaluating TQ-IVF {bits}b (nlist={nlist}, nprobe={nprobe}, rerank_mult={tq_rerank_mult})...")
+                    start_t = time.time()
+                    retrieve_k = max(k_values) * tq_rerank_mult
+                    tq_results = engine.search_batch(queries_t, top_k=retrieve_k)
+                    qps = len(queries_t) / (time.time() - start_t)
+                    
+                    I = np.zeros((len(queries_t), max(k_values)), dtype=np.int64)
+                    for i, (ids, _) in enumerate(tq_results):
+                        candidate_ids = ids.cpu().numpy().astype(np.int64, copy=False)
+                        candidate_ids = candidate_ids[candidate_ids >= 0]
+                        if candidate_ids.size == 0:
+                            continue
 
-                    if tq_rerank_mult > 1 and candidate_ids.size > max(k_values):
-                        candidates_raw = torch.from_numpy(np.asarray(corpus_mm[candidate_ids], dtype=np.float32))
-                        exact_scores = torch.mv(candidates_raw, queries_t[i].cpu())
-                        keep = min(max(k_values), exact_scores.numel())
-                        _, top_idx = torch.topk(exact_scores, keep)
-                        final_ids = candidate_ids[top_idx.numpy()]
-                        I[i, :len(final_ids)] = final_ids
-                    else:
-                        keep = min(max(k_values), candidate_ids.size)
-                        I[i, :keep] = candidate_ids[:keep]
+                        if tq_rerank_mult > 1 and candidate_ids.size > max(k_values):
+                            candidates_raw = torch.from_numpy(np.asarray(corpus_mm[candidate_ids], dtype=np.float32))
+                            exact_scores = torch.mv(candidates_raw, queries_t[i].cpu())
+                            keep = min(max(k_values), exact_scores.numel())
+                            _, top_idx = torch.topk(exact_scores, keep)
+                            final_ids = candidate_ids[top_idx.numpy()]
+                            I[i, :len(final_ids)] = final_ids
+                        else:
+                            keep = min(max(k_values), candidate_ids.size)
+                            I[i, :keep] = candidate_ids[:keep]
+                    
+                    m_t, m_r = {}, {}
+                    for k in k_values:
+                        acc, rec = 0, 0
+                        for i in range(len(queries_t)):
+                            pred = I[i, :k]
+                            if ground_truth[i, 0] in pred: acc += 1
+                            gt_set, pred_set = set(ground_truth[i, :k]), set(pred)
+                            rec += len(gt_set.intersection(pred_set)) / k
+                        m_t[k], m_r[k] = (acc / len(queries_t)) * 100, (rec / len(queries_t)) * 100
+
+                    priv_now, rss_now = get_ram_info()
+                    ram_priv_inc = max(0.0, priv_now - priv_before)
+
+                    rr_tag = f" rr{x}" if (x := tq_rerank_mult) > 1 else ""
+                    results.append({
+                        "label": f"TQ-IVF nl{nlist} np{nprobe} {bits}b{rr_tag}", 
+                        "top1": m_t, "recall": m_r, "qps": qps, 
+                        "priv_mb": ram_priv_inc, "rss_mb": rss_now
+                    })
                 
-                m_t, m_r = {}, {}
-                for k in k_values:
-                    acc, rec = 0, 0
-                    for i in range(len(queries_t)):
-                        pred = I[i, :k]
-                        if ground_truth[i, 0] in pred: acc += 1
-                        gt_set, pred_set = set(ground_truth[i, :k]), set(pred)
-                        rec += len(gt_set.intersection(pred_set)) / k
-                    m_t[k], m_r[k] = (acc / len(queries_t)) * 100, (rec / len(queries_t)) * 100
-                rr_tag = f" rr{x}" if (x := tq_rerank_mult) > 1 else ""
-                results.append({"label": f"TQ-IVF nl{nlist} np{nprobe} {bits}b{rr_tag}", "top1": m_t, "recall": m_r, "qps": qps, "ram_mb": ram_tq})
-            
-            del engine
-            gc.collect()
+                del engine
+                gc.collect()
+                empty_working_set() # Dọn dẹp Cache ngay sau khi xong
 
         # 2. FAISS SQ Evaluation (IVF-SQ)
         if bits != 2:
@@ -910,10 +971,11 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
                 print(f"Evaluating FAISS SQ {bits}b (IVF)...")
                 try:
                     gc.collect()
-                    ram_before = rss_mb()
+                    priv_before, rss_before = get_ram_info()
                     sq_faiss_index = faiss.read_index(sq_faiss_path)
                     ram_sq = max(0.0, rss_mb() - ram_before)
                     sq_faiss_index.nprobe = 64
+                    
                     start_sq = time.time()
                     D, I = sq_faiss_index.search(queries_t.cpu().numpy(), max(k_values))
                     qps_sq = len(queries_t) / (time.time() - start_sq)
@@ -927,9 +989,19 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
                             gt_set, pred_set = set(ground_truth[i, :k]), set(pred)
                             rec += len(gt_set.intersection(pred_set)) / k
                         m_t_sq[k], m_r_sq[k] = (acc / len(queries_t)) * 100, (rec / len(queries_t)) * 100
+
+                    priv_sq, _ = get_ram_info()
+                    ram_sq = priv_sq - priv_before
+                    
+                    _, rss_after_sq = get_ram_info()
                         
-                    results.append({"label": f"FAISS-SQ {bits}b", "top1": m_t_sq, "recall": m_r_sq, "qps": qps_sq, "ram_mb": ram_sq})
+                    results.append({
+                        "label": f"FAISS-SQ {bits}b", 
+                        "top1": m_t_sq, "recall": m_r_sq, "qps": qps_sq, 
+                        "priv_mb": ram_sq, "rss_mb": rss_after_sq
+                    })
                     del sq_faiss_index; gc.collect()
+                    empty_working_set() # Dọn dẹp Cache
                 except Exception as e:
                     print(f"Error evaluating FAISS SQ: {e}")
             else:
@@ -941,7 +1013,7 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
             print(f"Evaluating FAISS PQ {bits}b (IVF)...")
             try:
                 gc.collect()
-                ram_before = rss_mb()
+                priv_before, rss_before = get_ram_info()
                 pq_index = faiss.read_index(pq_cache_path)
                 ram_pq = max(0.0, rss_mb() - ram_before)
                 pq_index.nprobe = 64
@@ -958,9 +1030,19 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
                         gt_set, pred_set = set(ground_truth[i, :k]), set(pred)
                         rec += len(gt_set.intersection(pred_set)) / k
                     m_t_pq[k], m_r_pq[k] = (acc / len(queries_t)) * 100, (rec / len(queries_t)) * 100
+
+                priv_pq, _ = get_ram_info()
+                ram_pq = priv_pq - priv_before
+                
+                _, rss_after_pq = get_ram_info()
                     
-                results.append({"label": f"FAISS-PQ {bits}b", "top1": m_t_pq, "recall": m_r_pq, "qps": qps_pq, "ram_mb": ram_pq})
+                results.append({
+                    "label": f"FAISS-PQ {bits}b", 
+                    "top1": m_t_pq, "recall": m_r_pq, "qps": qps_pq, 
+                    "priv_mb": ram_pq, "rss_mb": rss_after_pq
+                })
                 del pq_index; gc.collect()
+                empty_working_set() # Dọn dẹp Cache
             except Exception as e:
                 print(f"Error evaluating FAISS PQ: {e}")
         else:
@@ -980,11 +1062,11 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
     print("\n" + "=" * 125)
     print("SET RECALL@K (%)")
     print("=" * 125)
-    print(f"{'Method':<28} | {hdr2} | {'QPS':>8} | {'RAM (MB)':>8}")
-    print("-" * 125)
+    print(f"{'Method':<28} | {hdr2} | {'QPS':>8} | {'Private(MB)':>11} | {'WorkSet(MB)':>11}")
+    print("-" * 145)
     for res in results:
         cols = " | ".join([f"{res['recall'][k]:5.1f}%" for k in k_values])
-        print(f"{res['label']:<28} | {cols} | {res['qps']:>8.1f} | {res.get('ram_mb', 0):>8.0f}")
+        print(f"{res['label']:<28} | {cols} | {res['qps']:>8.1f} | {res.get('priv_mb', 0):>11.1f} | {res.get('rss_mb', 0):>11.1f}")
 
     out_dir = os.path.join(project_root, "benchmark_result")
     os.makedirs(out_dir, exist_ok=True)
@@ -998,6 +1080,7 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
                 "top1": {str(k): float(v) for k, v in r["top1"].items()},
                 "recall": {str(k): float(v) for k, v in r["recall"].items()},
                 "ram_mb": r.get("ram_mb", 0.0),
+                "ram_cache_mb": r.get("ram_cache_mb", 0.0),
             }
         )
     with open(out_json, "w", encoding="utf-8") as f:
@@ -1052,6 +1135,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--rebuild-cache", action="store_true", help="Bỏ cache và tải lại từ HF dataset")
     p.add_argument("--rebuild-gt", action="store_true", help="Chỉ tính toán lại Ground Truth cho Queries")
     p.add_argument("--query-json", type=str, default="", help="Path to JSON file with text questions to embed.")
+    p.add_argument("--hard-limit-mb", type=int, default=0, help="Ép giới hạn RAM cứng (chỉ Windows). VD: 512")
     return p
 
 
