@@ -74,43 +74,36 @@ def plot_efficiency(data):
     """
     Vẽ biểu đồ so sánh QPS và RAM (Bar chart)
     """
-    # Chọn ra các mẫu tiêu biểu để so sánh
-    # TQ-IVF 2b np64, TQ-IVF 4b np64, FAISS-PQ 2b
     labels = []
     qps_values = []
     ram_values = []
     
-    # Lấy FAISS PQ 2b (mẫu duy nhất FAISS chạy được)
-    faiss_pq = [r for r in data["results"] if "FAISS-PQ 2b" in r["label"]]
-    if faiss_pq:
-        labels.append("FAISS-PQ 2b")
-        qps_values.append(faiss_pq[0]["qps"])
-        ram_values.append(faiss_pq[0]["ram_mb"])
-        
-    # Lấy TQ 2b np64
-    tq_2b = [r for r in data["results"] if "TQ-IVF nl4096 np64 2b" in r["label"]]
-    if tq_2b:
-        labels.append("TQ-IVF 2b")
-        qps_values.append(tq_2b[0]["qps"])
-        ram_values.append(tq_2b[0]["ram_mb"])
+    # 1. Lấy tất cả các mẫu FAISS có trong JSON
+    faiss_results = [r for r in data["results"] if "FAISS" in r["label"]]
+    for r in faiss_results:
+        labels.append(r["label"])
+        qps_values.append(r["qps"])
+        ram_values.append(r["ram_mb"])
 
-    # Lấy TQ 4b np64
-    tq_4b = [r for r in data["results"] if "TQ-IVF nl4096 np64 4b" in r["label"]]
-    if tq_4b:
-        labels.append("TQ-IVF 4b")
-        qps_values.append(tq_4b[0]["qps"])
-        ram_values.append(tq_4b[0]["ram_mb"])
+    # 2. Lấy các mẫu TQ tiêu biểu (np=64)
+    tq_samples = [r for r in data["results"] if "np64" in r["label"] and "nl4096" in r["label"]]
+    for r in tq_samples:
+        labels.append(r["label"].replace("nl4096 ", "")) # Rút gọn nhãn
+        qps_values.append(r["qps"])
+        ram_values.append(r["ram_mb"])
 
     # Vẽ biểu đồ Dual Axis
-    fig, ax1 = plt.subplots(figsize=(10, 6))
+    fig, ax1 = plt.subplots(figsize=(14, 8))
 
     color_qps = 'tab:blue'
-    ax1.set_xlabel('Model Configuration')
+    ax1.set_xlabel('Model Configuration', fontsize=12, fontweight='bold')
     ax1.set_ylabel('Throughput (QPS)', color=color_qps, fontsize=12, fontweight='bold')
-    bars = ax1.bar(labels, qps_values, color=color_qps, alpha=0.6, width=0.4, label='QPS')
+    
+    # Vẽ cột QPS
+    bars = ax1.bar(labels, qps_values, color=color_qps, alpha=0.6, width=0.5, label='QPS')
     ax1.tick_params(axis='y', labelcolor=color_qps)
     
-    # Thêm số liệu trên đầu cột QPS
+    # Thêm số liệu QPS
     for bar in bars:
         height = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2., height + 5, f'{height:.1f}', ha='center', va='bottom', color=color_qps, fontweight='bold')
@@ -118,6 +111,8 @@ def plot_efficiency(data):
     ax2 = ax1.twinx()
     color_ram = 'tab:red'
     ax2.set_ylabel('Peak RAM (MB)', color=color_ram, fontsize=12, fontweight='bold')
+    
+    # Vẽ đường RAM
     ax2.plot(labels, ram_values, color=color_ram, marker='D', markersize=10, linewidth=3, label='RAM')
     ax2.tick_params(axis='y', labelcolor=color_ram)
     
@@ -125,7 +120,8 @@ def plot_efficiency(data):
     for i, txt in enumerate(ram_values):
         ax2.annotate(f'{txt:.1f} MB', (labels[i], ram_values[i]), textcoords="offset points", xytext=(0,10), ha='center', color=color_ram, fontweight='bold')
 
-    plt.title("QPS vs Memory Usage Comparison (5M Vectors)", fontsize=14, fontweight='bold')
+    plt.title("QPS vs Memory Usage (Real Benchmark Data)", fontsize=16, fontweight='bold', pad=20)
+    plt.xticks(rotation=15)
     fig.tight_layout()
     
     file_name = "efficiency_comparison.png"
