@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+qdrant-client
+pymupdf
+ollama
+torch
+numpy
+python-multipart
+supabase
+python-dotenv
+tqdm

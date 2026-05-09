@@ -1,143 +1,182 @@
-# 🚀 TurboQuant Vector Retrieval Benchmark (SQ+QJL)
+# ARQ-RAG: Adaptive Residual Quantization for Efficient RAG Benchmarking
 
-![TurboQuant Benchmark](https://img.shields.io/badge/Algorithm-SQ+QJL-blue.svg) ![Tokens](https://img.shields.io/badge/Scale-5_Million_Vectors-orange.svg) ![Recall](https://img.shields.io/badge/Recall@4-100%25-brightgreen.svg)
+[![Project Status: Active](https://img.shields.io/badge/Project%20Status-Active-brightgreen.svg)](https://github.com/Neshaki091/ARQ-RAG-turboquant)
+[![Framework: Next.js](https://img.shields.io/badge/Frontend-Next.js%2014-black)](https://nextjs.org/)
+[![Backend: FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688)](https://fastapi.tiangolo.com/)
+[![Vector DB: Qdrant](https://img.shields.io/badge/VectorDB-Qdrant-red)](https://qdrant.tech/)
+[Link demo](https://arq-rag-turboquant.vercel.app/)
 
-**Author:** HUYNH CONG LUYEN (Senior Student at the University of Transport Ho Chi Minh City)  
-**Tác giả:** HUỲNH CÔNG LUYỆN (Sinh viên năm cuối, Trường Đại học Giao thông Vận tải Thành phố Hồ Chí Minh)
+## 🌟 Tổng quan
+Đồ án này tập trung vào việc **tìm kiếm giải pháp tối ưu hóa tăng cường truy xuất lượng tử trực tuyến (Online Quantization-Enhanced Retrieval Optimization)** trong hệ thống RAG. 
 
----
+Mục tiêu cốt lõi là giải quyết bài toán cân bằng giữa **Tốc độ truy xuất (Speed)** và **Độ chính xác ngữ cảnh (Contextual Accuracy)**. Bằng cách triển khai kỹ thuật lượng tử hóa thặng dư thích ứng (ARQ) dựa trên công nghệ TurboQuant, dự án minh chứng một giải pháp cho phép tìm kiếm dữ liệu lớn với độ trễ cực thấp trong khi vẫn đảm bảo chất lượng phản hồi của mô hình ngôn ngữ lớn (LLM).
 
-> 🌍 **Choose your language / Chọn ngôn ngữ:**
-> - [🇺🇸 English (Detailed Implementation Below)](#-english-documentation)
-> - [🇻🇳 Tiếng Việt (Hướng dẫn chi tiết bên dưới)](#-tài-liệu-tiếng-việt)
+Dự án này phục vụ cho việc thực nghiệm và chứng minh ưu điểm của ARQ so với các phương pháp Baseline phổ biến như Product Quantization (PQ) hay Scalar Quantization (SQ8).
 
----
+## 🚀 Các tính năng nổi bật
+- **Hybrid Cloud Architecture**: Lưu trữ mã nén trên Qdrant Cloud nhưng tính toán tìm kiếm (Scoring) trực tiếp tại RAM Local Backend.
+- **Native RAM Engine**: Công cụ tìm kiếm viết bằng NumPy tối ưu hóa cho 5 mô hình (Raw, Adaptive, PQ, SQ8, ARQ).
+- **Automated Benchmark Loop**: Tự động chạy hàng trăm query test và đánh giá bằng **RAGAS** (Faithfulness, Relevancy, Precision).
+- **Interactive Dashboard**: Theo dõi Latency và Memory Usage thời gian thực qua giao diện Next.js hiện đại.
 
-# 🇺🇸 English Documentation
+## 🛠 Bộ 5 Mô hình So sánh
+1.  **RAG-RAW**: Sử dụng vector Float32 nguyên bản (Upper Bound).
+2.  **Adaptive-RAG**: Kỹ thuật Matryoshka Embeddings linh hoạt.
+3.  **Manual-PQ**: Product Quantization (32 subspaces).
+4.  **Manual-SQ8**: Scalar Quantization (8-bit integer).
+5.  **ARQ-RAG (TurboQuant)**: Sản phẩm nghiên cứu chính, sử dụng cơ chế ADC (Asymmetric Distance Computation).
 
-## 📖 Overview & Algorithmic Highlights
-This project serves as a comprehensive benchmarking stress-test suite for **TurboQuant**, a vector engine architecture focused on *Extreme Compression*. The current version utilizes a high-performance **SQ+QJL (Scalar Quantization + Quantized Johnson-Lindenstrauss)** pipeline, optimized with **Rust SIMD**.
+## 📦 Cài đặt nhanh
 
-### Stage 1: Orthogonal Rotation & Scalar Quantization (SQ)
-1. **Variance Homogenization via Random Rotation Matrix ($Pi$)**: TurboQuant uses an orthogonal rotational matrix (via QR decomposition) to homogenize variance across all dimensions, eliminating outlier effects.
-2. **Scalar Quantization**: The rotated vectors are compressed into 2-bit or 4-bit representations. This provides a baseline search speedup of 10-20x.
+### Yêu cầu hệ thống
+- Docker & Docker Compose
+- Python 3.10+
+- Node.js 18+
 
-### Stage 2: Quantized Johnson-Lindenstrauss (QJL)
-The residual error from SQ is compensated using the QJL lemma. By passing the residual through a sub-gaussian matrix and taking its signs (+1/-1), we effectively bound dot product differences optimally, pushing Recall past 98-99%.
+### Cấu hình biến môi trường (.env)
+Tạo file `.env` tại dự án gốc với các thông tin:
+```env
+# Cloud Config
+QDRANT_CLOUD_URL=your_qdrant_url
+QDRANT_CLOUD_API_KEY=your_key
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_ROLE_KEY=your_key
 
----
-
-## 💻 System Configuration (Hardware)
-The following benchmarks were conducted on a standard consumer-grade laptop to demonstrate accessibility and performance optimization.
-
-| Component | Specification |
-| :--- | :--- |
-| **CPU** | Intel(R) Core(TM) i5-10300H CPU @ 2.50GHz |
-| **RAM** | 15.84 GB |
-| **OS** | Windows 11 |
-| **SIMD** | AVX2, FMA (TurboQuant Native SIMD Active) |
-| **Core Library** | **TQ_engine_lib** (Rust-based core) |
-
----
-
-## 🏆 Official Results Evaluation (5 Million Vectors)
-
-### 1. Performance Results (Stress Test)
-> **Note:** **RAW (F32)** utilizes **NumPy**, which is highly optimized with MKL/OpenBLAS. **TURBOQUANT** is implemented using **Rust SIMD** but is currently in an early, **non-fully-optimized** state.
-
-```text
-Method          | Batch      | Peak RAM     | Latency    | QPS        | Speedup
-------------------------------------------------------------------------------------------------------------
-RAW (F32)       |   250,000 |     932.4 MB |   14.5162s |      0.07 |      1.0x
-SQ 2-bit        | 4,300,000 |    1009.4 MB |    1.3064s |      0.77 |     11.1x
-SQ 4-bit        | 2,100,000 |     991.5 MB |    1.6181s |      0.62 |      9.0x
-PQ 2-bit        | 4,000,000 |     955.7 MB |    0.6529s |      1.53 |     22.2x
-TQ 2bit         | 4,000,000 |     990.1 MB |    4.4719s |      0.22 |      3.2x
-TQ 4bit         | 1,500,000 |     923.6 MB |    4.9892s |      0.20 |      2.9x
-============================================================================================================
+# LLM Config
+GOOGLE_API_KEY=your_gemini_key_for_eval
+GOOGLE_API_KEY_2=your_gemini_key_for_gen
 ```
 
-### 2. Accuracy Results (Recall@K)
-Tested on 28,378 vectors. **PQ** was trained on a highly fragmented custom 256-sample subset to simulate real-world data mismatch.
+### Chạy hệ thống
+```bash
+# 1. Khởi động Backend & Frontend
+docker-compose up -d --build
 
-**TABLE 1: TOP-1 IN K PROBABILITY**
-```text
-Method       | P@K=1  | P@K=2  | P@K=4  | P@K=8  | P@K=16 | P@K=32 | P@K=64 
---------------------------------------------------------------------------------------------------------------
-PQ 2-bit     |  48.0% |  74.0% |  84.0% |  96.0% | 100.0% | 100.0% | 100.0% 
-TQ 2-bit     |  54.0% |  78.0% |  92.0% |  98.0% |  98.0% |  98.0% | 100.0% 
-TQ 4-bit     |  88.0% |  92.0% | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% 
+# 2. Đồng bộ mã nén từ Cloud
+python scripts/cloud/re_quantize.py
 ```
 
-**TABLE 2: SET RECALL@K (Coverage)**
-```text
-Method       | R@K=1  | R@K=2  | R@K=4  | R@K=8  | R@K=16 | R@K=32 | R@K=64 
---------------------------------------------------------------------------------------------------------------
-PQ 2-bit     |  48.0% |  56.0% |  58.0% |  55.5% |  59.8% |  62.7% |  65.8% 
-TQ 2-bit     |  54.0% |  68.0% |  74.0% |  77.2% |  76.9% |  76.1% |  77.3% 
-TQ 4-bit     |  88.0% |  82.0% |  90.0% |  88.0% |  88.4% |  88.6% |  89.7% 
+## 📖 Tài liệu chuyên sâu
+Để hiểu rõ hơn về luồng dữ liệu và thiết kế hệ thống, vui lòng tham khảo:
+- [Kiến trúc hệ thống (ARCHITECTURE.md)](./ARCHITECTURE.md)
+- [Thuật toán TurboQuant (Research Paper Reference)](./docs/theory.md) (nếu có)
+
+## 🏆 Kết quả Đánh giá Vector Engine (5 Triệu Vectors)
+*Thực nghiệm thực hiện trên: Laptop TUF Dash F15 (Intel Core i5-10300H, 16GB RAM, 1TB SSD NVMe PCIe 3.0 x4 | PCIe 4.0 x4)*
+
+Hệ thống lõi đã trải qua bài kiểm tra chịu tải cực hạn (Stress Test) trên tập dữ liệu `facebook/wiki_dpr` quy mô **5 triệu vectors (768 chiều)**. Kết quả thực nghiệm (`benchmark_results.json`) đã chứng minh tính ưu việt tuyệt đối của TurboQuant (TQ-IVF) trong điện toán biên:
+
+| Thuật toán | Mật độ nén | RAM Tiêu thụ (Peak) | Trạng thái (5M Vectors) |
+| :--- | :--- | :--- | :--- |
+| **FAISS-SQ** | 4-bit | > 1.8 GB | ❌ Lỗi OOM (`std::bad_alloc`) |
+| **FAISS-PQ** | 4-bit | > 1.8 GB | ❌ Lỗi OOM (`std::bad_alloc`) |
+| **TQ-IVF** | 4-bit | **~ 12.06 MB** | ✅ Hoạt động mượt mà |
+| **TQ-IVF** | 2-bit | **~ 15.61 MB** | ✅ Hoạt động mượt mà |
+
+### 📈 Chi tiết Độ chính xác (Accuracy Metrics)
+
+#### 1. Top-1 Probability (%) - Chế độ 2-bit
+| Algorithm | P@1 | P@8 | P@16 | P@64 |
+| :--- | :---: | :---: | :---: | :---: |
+| **TQ-IVF (np=2)** | 17.5% | 28.0% | 29.5% | 29.8% |
+| **TQ-IVF (np=16)** | 26.0% | 63.3% | 68.8% | 73.3% |
+| **TQ-IVF (np=64)** | 27.5% | 72.3% | 81.3% | **87.5%** |
+| **FAISS-PQ (Baseline)** | 35.3% | 71.8% | 78.0% | 84.3% |
+
+#### 2. Top-1 Probability (%) - Chế độ 4-bit
+| Algorithm | P@1 | P@8 | P@16 | P@64 |
+| :--- | :---: | :---: | :---: | :---: |
+| **TQ-IVF (np=2)** | 36.8% | 43.5% | 43.5% | 43.5% |
+| **TQ-IVF (np=16)** | 60.5% | 77.0% | 77.5% | 77.5% |
+| **TQ-IVF (np=64)** | 69.0% | 90.5% | 91.0% | **91.0%** |
+| **FAISS-PQ/SQ** | N/A | N/A | N/A | ❌ OOM |
+
+#### 3. Set Recall@K (%) - Chế độ 2-bit
+| Algorithm | R@1 | R@8 | R@16 | R@64 |
+| :--- | :---: | :---: | :---: | :---: |
+| **TQ-IVF (np=2)** | 17.5% | 21.2% | 22.1% | 25.2% |
+| **TQ-IVF (np=16)** | 26.0% | 38.7% | 40.7% | 44.9% |
+| **TQ-IVF (np=64)** | 27.5% | 43.7% | 46.6% | **50.9%** |
+| **FAISS-PQ (Baseline)** | 35.3% | 44.4% | 47.4% | 50.7% |
+
+#### 4. Set Recall@K (%) - Chế độ 4-bit
+| Algorithm | R@1 | R@8 | R@16 | R@64 |
+| :--- | :---: | :---: | :---: | :---: |
+| **TQ-IVF (np=2)** | 36.8% | 35.3% | 37.1% | 37.6% |
+| **TQ-IVF (np=16)** | 60.5% | 62.1% | 63.6% | 63.0% |
+| **TQ-IVF (np=64)** | 69.0% | 72.3% | 74.1% | **74.4%** |
+| **FAISS-PQ/SQ** | N/A | N/A | N/A | ❌ OOM |
+
+**Kết luận cốt lõi:** Các thư viện chuẩn công nghiệp như FAISS gặp **Nút thắt Bộ nhớ (Memory Wall)** khi Scale-up do cơ chế nạp toàn bộ mảng dữ liệu vào RAM (Heap). Ngược lại, **TurboQuant** với kiến trúc **Zero-Copy Memory Mapping (`mmap`)** kết hợp Rust SIMD chỉ tiêu tốn đúng ~12MB RAM, cho phép truy xuất khối lượng dữ liệu khổng lồ ngay trên các thiết bị giới hạn tài nguyên. TQ-IVF 4-bit đạt độ chính xác vượt trội (P@64 > 91%) trong khi vẫn duy trì mức tiêu thụ RAM tối thiểu.
+
+### 📊 Phân tích Trực quan (Visualization)
+
+Để trực quan hóa các con số trên, bạn có thể sử dụng script `visualize_results.py` đi kèm:
+```bash
+python Benchmark/eval_alt/visualize_results.py
 ```
 
-- **TurboQuant outperforms PQ in fragmented scenarios**, particularly in **Set Recall**, proving its robustness as a training-free architecture.
-- **TQ 4-bit** achieves perfect recall at K=4, making it ideal for high-precision RAG systems.
+Các biểu đồ sau đây minh họa sức mạnh của TurboQuant:
+
+#### 1. Biểu đồ Độ chính xác (Accuracy Curves)
+| Top-1 Probability (2-bit) | Top-1 Probability (4-bit) |
+| :---: | :---: |
+| ![Top-1 2b](./Benchmark/data/wiki_benchmark/charts/top1_2b.png) | ![Top-1 4b](./Benchmark/data/wiki_benchmark/charts/top1_4b.png) |
+
+| Set Recall@K (2-bit) | Set Recall@K (4-bit) |
+| :---: | :---: |
+| ![Recall 2b](./Benchmark/data/wiki_benchmark/charts/recall_2b.png) | ![Recall 4b](./Benchmark/data/wiki_benchmark/charts/recall_4b.png) |
+
+#### 2. Biểu đồ Hiệu năng (Efficiency)
+Biểu đồ này so sánh trực tiếp cán cân giữa **Tốc độ (QPS)** và **Bộ nhớ (RAM)**. Lưu ý cột RAM của FAISS cao vọt và gây lỗi OOM ở quy mô lớn, trong khi TQ giữ mức RAM gần như không đổi.
+
+![Efficiency Comparison](./Benchmark/data/wiki_benchmark/charts/efficiency_comparison.png)
+
+**Kết luận từ biểu đồ:**
+- **TQ-IVF (np=64)** đạt độ chính xác tương đương FAISS-PQ nhưng sử dụng RAM ít hơn **~80 lần**.
+- Khả năng mở rộng (Scalability) của TQ là vượt trội nhờ cơ chế `mmap`, không bị phụ thuộc vào dung lượng RAM vật lý khi nạp dữ liệu.
+
+## 🛠 Hướng dẫn chạy Benchmark Lõi (eval_alt)
+
+### 1. Yêu cầu hệ thống (Hardware & Software)
+*   **Hệ điều hành:** Windows 10/11 hoặc Linux (Khuyến khích Ubuntu 22.04+).
+*   **Phần cứng tối thiểu:** CPU i3 đời 10+, RAM 8GB (TQ không yêu cầu nhiều RAM nhưng quá trình tải/chuẩn bị dữ liệu ban đầu cần RAM để xử lý).
+*   **Dung lượng ổ đĩa:** Cần trống ít nhất **20GB** (15GB cho tập dữ liệu thô và ~2GB cho các file index). Khuyến khích sử dụng **SSD NVMe (PCIe 3.0 x4 hoặc cao hơn)** để đạt tốc độ quét tốt nhất qua mmap.
+*   **Python:** Phiên bản 3.10 trở lên.
+
+### 2. Cài đặt thư viện lõi
+Chạy lệnh sau để cài đặt các thư viện toán học cần thiết:
+```bash
+pip install -r requirements_benchmark.txt
+```
+
+### 3. Các lệnh chạy Benchmark phổ biến
+
+* **Chạy bài Test nhanh (50.000 vectors):**
+  Lệnh này tải dữ liệu rất nhanh (~150MB) và FAISS sẽ không bị văng lỗi tràn RAM. Phù hợp để test luồng chạy.
+  ```bash
+  python Benchmark/eval_alt/benchmark.py --max-vectors 50000 --rebuild-cache
+  ```
+
+* **Chạy bài Stress Test Cực hạn (5 triệu vector):**
+  Lệnh này tái hiện lại môi trường thực nghiệm của Luận văn. Lưu ý: Cần trống 20GB ổ cứng và mất 1-3 tiếng để tải dữ liệu từ HuggingFace.
+  ```bash
+  python Benchmark/eval_alt/benchmark.py --max-vectors 5000000
+  ```
+
+### 4. Giải thích các tham số (CLI Arguments)
+- `--max-vectors <số_lượng>`: Chỉ định giới hạn số lượng vector tải về từ HuggingFace để nạp vào Index.
+- `--rebuild-cache`: Ép hệ thống xóa bỏ các file cache nén cũ (`tq_index_temp`) và nạp lại dữ liệu gốc từ đầu. Rất hữu ích khi bạn đổi số lượng vector.
+- `--k-values "1,2,4,8,16,64"`: Chỉ định các mốc đo lường độ phủ Set Recall@K.
+- `--tq-nprobes "2,4,8,16"`: Điều chỉnh số lượng cụm lân cận cần quét của lõi TurboQuant. Mức nprobe càng cao thì Recall càng lớn nhưng QPS giảm.
+- `--query-json <path>`: Dùng bộ câu hỏi chữ thật thay vì tạo câu hỏi ảo ngẫu nhiên.
 
 ---
+*Tài liệu hướng dẫn triển khai dự án ARQ-RAG (TurboQuant).*
 
-# 🇻🇳 Tài Liệu Tiếng Việt
+# PHÁT TRIỂN BỞI 2 SINH VIÊN:
+- Huỳnh Công Luyện 
+- Nguyễn Đình Mạnh
 
-## 📖 Giải Thích Điểm Nhấn Thuật Toán
-Dự án này là bộ khung kiểm thử hiệu suất cho kiến trúc **TurboQuant**, sử dụng quy trình nén **SQ+QJL (Scalar Quantization + Quantized Johnson-Lindenstrauss)** kết hợp tối ưu hóa bằng **Rust SIMD**.
-
-### Giai Đoạn 1: Xoay Trực Giao & Lượng Tử Hóa Tuyến Tính (SQ)
-Hệ thống sử dụng ma trận xoay trực giao $Pi$ để tản đều phương sai, sau đó nén vector về mức 2-bit hoặc 4-bit. Điều này giúp tăng tốc truy xuất từ 10-20 lần.
-
-### Giai Đoạn 2: Bù Sai Số QJL
-Phần dư (Residual) sau khi nén SQ được xử lý qua định lý Johnson-Lindenstrauss để lấy các dấu (sign +1/-1). Bước này giúp khôi phục độ chính xác, đưa Recall vượt ngưỡng 98%.
-
----
-
-## 💻 Thông số Cấu hình Hệ thống
-Toàn bộ quá trình đo lường được thực hiện trên cấu hình máy tính cá nhân tiêu chuẩn:
-
-| Thành phần | Thông số chi tiết |
-| :--- | :--- |
-| **CPU** | Intel(R) Core(TM) i5-10300H CPU @ 2.50GHz |
-| **RAM** | 15.84 GB |
-| **Hệ điều hành** | Windows 11 |
-| **SIMD** | AVX2, FMA (TurboQuant Native SIMD) |
-| **Thư viện lõi** | **TQ_engine_lib** (Rust SIMD) |
-
----
-
-## 🏆 Kết Quả Đo Lường Thực Tế (5 Triệu Vectors)
-
-### 1. Kết quả Hiệu Năng (Stress Test)
-> **Lưu ý:** **RAW (F32)** sử dụng thư viện **NumPy** (đã được tối ưu cực tốt bằng MKL/OpenBLAS). **TURBOQUANT** sử dụng lõi **Rust SIMD** tự viết nhưng hiện tại **vẫn chưa được tối ưu hóa hoàn toàn** (đang ở giai đoạn phát triển sớm).
-
-| Phương pháp | Batch | Peak RAM | Latency | Speedup |
-| :--- | :--- | :--- | :--- | :--- |
-| RAW (F32) | 250,000 | 932.4 MB | 14.5162s | 1.0x |
-| SQ 2-bit | 4,300,000 | 1009.4 MB | 1.3064s | 11.1x |
-| TQ 2-bit | 4,000,000 | 990.1 MB | 4.4719s | 3.2x |
-| TQ 4-bit | 1,500,000 | 923.6 MB | 4.9892s | 2.9x |
-
-### 2. Kết quả Độ Chính Xác (Recall@K)
-Thử nghiệm trên 28,378 vector. **PQ** được huấn luyện trên 256 mẫu phân mảnh để mô phỏng sự sai lệch dữ liệu trong thực tế.
-
-**BẢNG 1: TOP-1 IN K PROBABILITY**
-| Phương pháp | P@K=1 | P@K=2 | P@K=4 | P@K=8 | P@K=16 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| PQ 2-bit | 48.0% | 74.0% | 84.0% | 96.0% | 100.0% |
-| TQ 2-bit | 54.0% | 78.0% | 92.0% | 98.0% | 98.0% |
-| TQ 4-bit | 88.0% | 92.0% | 100.0% | 100.0% | 100.0% |
-
-**BẢNG 2: SET RECALL@K (Độ phủ)**
-| Phương pháp | R@K=1 | R@K=2 | R@K=4 | R@K=8 | R@K=16 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| PQ 2-bit | 48.0% | 56.0% | 58.0% | 55.5% | 59.8% |
-| TQ 2-bit | 54.0% | 68.0% | 74.0% | 77.2% | 76.9% |
-| TQ 4-bit | 88.0% | 82.0% | 90.0% | 88.0% | 88.4% |
-
----
-**TurboQuant - High-Performance Vector Search Engine**
-*Thesis Project Optimization for Large-Scale RAG Systems.*
+# MỤC TIÊU:
+- Tìm kiếm giải pháp tối ưu hóa tăng cường truy xuất lượng tử trực tuyến (Online Quantization-Enhanced Retrieval Optimization) trong hệ thống RAG.

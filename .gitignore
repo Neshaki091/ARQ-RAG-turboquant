@@ -35,6 +35,12 @@ results/
 *.synctex.gz
 *.pdf
 */reports
+thesis_draft.tex
+functional_requiement.md
+date.md
+chart.md
+architecture.md
+attention.md
 
 # Others
 */blobs/*
