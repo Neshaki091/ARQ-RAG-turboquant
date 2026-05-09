@@ -29,18 +29,29 @@ def plot_accuracy(data, bit_mode, metric_type):
     k_values = data["k_values"]
     plt.figure(figsize=(10, 6))
     
-    # Lọc các kết quả theo bit_mode
-    # Ưu tiên lấy nlist=4096 để biểu đồ không bị rối, hoặc lấy đại diện
+    # Lấy toàn bộ các kết quả khớp với bit_mode
     results = [r for r in data["results"] if r["label"].endswith(bit_mode)]
     
-    # Chỉ lấy FAISS và một vài mẫu nprobe của TQ để biểu đồ rõ ràng
-    targets = ["FAISS", "np2", "np16", "np64"]
-    
+    import re
+    filtered_results = []
     for res in results:
         label = res["label"]
-        # Kiểm tra xem có phải target không
-        if not any(t in label for t in targets):
-            continue
+        if "FAISS" in label:
+            filtered_results.append(res)
+        elif "TQ-IVF" in label and "nl4096" in label:
+            match = re.search(r'np(\d+)', label)
+            if match:
+                np_val = int(match.group(1))
+                if 16 <= np_val <= 64:
+                    filtered_results.append(res)
+    
+    for res in filtered_results:
+        label = res["label"]
+        # Đổi tên label cho TQ để hiển thị rõ ràng hơn
+        if "TQ-IVF" in label:
+            match = re.search(r'np(\d+)', label)
+            if match:
+                label = f"TQ 4096 nprobe {match.group(1)}"
             
         y_values = [res[metric_type][str(k)] for k in k_values]
         
@@ -79,43 +90,78 @@ def plot_efficiency(data):
     priv_values = []
     rss_values = []
     
-    # 1. Lấy tất cả các mẫu FAISS có trong JSON
-    faiss_results = [r for r in data["results"] if "FAISS" in r["label"]]
+    # 1. Lấy các mẫu FAISS 4-bit
+    faiss_results = [r for r in data["results"] if "FAISS" in r["label"] and "4b" in r["label"]]
     for r in faiss_results:
         labels.append(r["label"])
         qps_values.append(r["qps"])
         priv_values.append(r.get("priv_mb", 0.0))
         rss_values.append(r.get("rss_mb", 0.0))
 
-    # 2. Lấy các mẫu TQ tiêu biểu (np=64)
-    tq_samples = [r for r in data["results"] if "np64" in r["label"] and "nl4096" in r["label"]]
+    # 2. Lấy các mẫu TQ 4-bit với nlist=4096 và nprobe trong khoảng [16, 64]
+    import re
+    tq_samples = []
+    for r in data["results"]:
+        label = r["label"]
+        if "TQ-IVF" in label and "nl4096" in label and "4b" in label:
+            match = re.search(r'np(\d+)', label)
+            if match:
+                np_val = int(match.group(1))
+                if 16 <= np_val <= 64:
+                    tq_samples.append(r)
+    
+    # Sắp xếp theo nprobe để biểu đồ đẹp hơn
+    tq_samples.sort(key=lambda x: int(re.search(r'np(\d+)', x["label"]).group(1)))
+    
     for r in tq_samples:
-        labels.append(r["label"].replace("nl4096 ", ""))
+        # Format lại label: TQ 4096 nprobe X
+        match = re.search(r'np(\d+)', r["label"])
+        clean_label = f"TQ 4096 nprobe {match.group(1)}" if match else r["label"]
+        labels.append(clean_label)
         qps_values.append(r["qps"])
         priv_values.append(r.get("priv_mb", 0.0))
         rss_values.append(r.get("rss_mb", 0.0))
 
-    # Vẽ biểu đồ Dual Axis cho QPS và Private RAM
+    # Vẽ biểu đồ Dual Axis cho QPS và RAM (Private vs Working Set)
     fig, ax1 = plt.subplots(figsize=(14, 8))
     color_qps = 'tab:blue'
     ax1.set_xlabel('Model Configuration', fontsize=12, fontweight='bold')
     ax1.set_ylabel('Throughput (QPS)', color=color_qps, fontsize=12, fontweight='bold')
-    bars = ax1.bar(labels, qps_values, color=color_qps, alpha=0.6, width=0.5, label='QPS')
+    bars = ax1.bar(labels, qps_values, color=color_qps, alpha=0.4, width=0.5, label='QPS')
     ax1.tick_params(axis='y', labelcolor=color_qps)
+    
+    # Ghi số QPS lên cột
     for bar in bars:
         height = bar.get_height()
         ax1.text(bar.get_x() + bar.get_width()/2., height + 5, f'{height:.1f}', ha='center', va='bottom', color=color_qps, fontweight='bold')
 
     ax2 = ax1.twinx()
-    color_priv = 'tab:green'
-    ax2.set_ylabel('Mandatory Private RAM (MB)', color=color_priv, fontsize=12, fontweight='bold')
-    ax2.plot(labels, priv_values, color=color_priv, marker='D', markersize=10, linewidth=3, label='Private RAM')
-    ax2.tick_params(axis='y', labelcolor=color_priv)
+    
+    # Đường 1: Private RAM (RAM thực sự cần thiết)
+    ax2.plot(labels, priv_values, color='tab:green', marker='D', markersize=10, linewidth=3, label='Private RAM (Mandatory)')
+    
+    # Đường 2: Working Set (RAM bao gồm cả Cache)
+    ax2.plot(labels, rss_values, color='tab:orange', marker='s', markersize=8, linewidth=2, linestyle='--', label='Working Set (Inc. Page Cache)')
+    
+    ax2.set_ylabel('Memory Usage (MB)', color='black', fontsize=12, fontweight='bold')
+    ax2.tick_params(axis='y', labelcolor='black')
+    
+    # Ghi chú cho Private RAM
     for i, txt in enumerate(priv_values):
-        ax2.annotate(f'{txt:.1f} MB', (labels[i], priv_values[i]), textcoords="offset points", xytext=(0,10), ha='center', color=color_priv, fontweight='bold')
+        ax2.annotate(f'{txt:.1f}', (labels[i], priv_values[i]), textcoords="offset points", xytext=(-15,10), ha='center', color='tab:green', fontweight='bold')
 
-    plt.title("QPS vs Private Memory Usage (The 'Memory Wall' Proof)", fontsize=16, fontweight='bold', pad=20)
+    # Ghi chú cho Working Set
+    for i, txt in enumerate(rss_values):
+        ax2.annotate(f'{txt:.0f}', (labels[i], rss_values[i]), textcoords="offset points", xytext=(15,-15), ha='center', color='tab:orange', fontweight='bold')
+
+    plt.title("QPS vs Memory Architecture (The 'Memory Wall' Proof)", fontsize=16, fontweight='bold', pad=20)
     plt.xticks(rotation=15)
+    
+    # Thêm Legend cho cả 2 trục
+    lines, labels_leg = ax1.get_legend_handles_labels()
+    lines2, labels2_leg = ax2.get_legend_handles_labels()
+    ax2.legend(lines + lines2, labels_leg + labels2_leg, loc='upper left')
+
     fig.tight_layout()
     plt.savefig(os.path.join(OUTPUT_DIR, "efficiency_comparison.png"), dpi=300, bbox_inches='tight')
     plt.close()
@@ -141,13 +187,11 @@ if __name__ == "__main__":
     else:
         results_data = load_data()
         
-        # Vẽ 4 biểu đồ Accuracy
-        plot_accuracy(results_data, "2b", "top1")
+        # Vẽ biểu đồ Accuracy (Chỉ 4-bit theo yêu cầu)
         plot_accuracy(results_data, "4b", "top1")
-        plot_accuracy(results_data, "2b", "recall")
         plot_accuracy(results_data, "4b", "recall")
         
         # Vẽ biểu đồ Efficiency
         plot_efficiency(results_data)
         
-        print(f"\nSuccess! All 5 charts are saved in: {OUTPUT_DIR}")
+        print(f"\nSuccess! All charts are saved in: {OUTPUT_DIR}")

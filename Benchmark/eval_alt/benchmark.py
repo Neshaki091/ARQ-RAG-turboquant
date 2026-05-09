@@ -959,10 +959,13 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
                         "top1": m_t, "recall": m_r, "qps": qps, 
                         "priv_mb": ram_priv_inc, "rss_mb": rss_now
                     })
+                    
+                    # Dọn dẹp Page Cache ngay sau mỗi nprobe để lượt sau đo chính xác
+                    empty_working_set() 
                 
                 del engine
                 gc.collect()
-                empty_working_set() # Dọn dẹp Cache ngay sau khi xong
+                empty_working_set()
 
         # 2. FAISS SQ Evaluation (IVF-SQ)
         if bits != 2:
@@ -973,7 +976,10 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
                     gc.collect()
                     priv_before, rss_before = get_ram_info()
                     sq_faiss_index = faiss.read_index(sq_faiss_path)
-                    ram_sq = max(0.0, rss_mb() - ram_before)
+                    
+                    priv_now, _ = get_ram_info()
+                    ram_sq = max(0.0, priv_now - priv_before)
+                    
                     sq_faiss_index.nprobe = 64
                     
                     start_sq = time.time()
@@ -1015,7 +1021,10 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
                 gc.collect()
                 priv_before, rss_before = get_ram_info()
                 pq_index = faiss.read_index(pq_cache_path)
-                ram_pq = max(0.0, rss_mb() - ram_before)
+                
+                priv_now, _ = get_ram_info()
+                ram_pq = max(0.0, priv_now - priv_before)
+                
                 pq_index.nprobe = 64
                 start_pq = time.time()
                 D, I = pq_index.search(queries_t.cpu().numpy(), max(k_values))
