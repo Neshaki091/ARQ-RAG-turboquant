@@ -141,7 +141,7 @@ Biểu đồ này so sánh trực tiếp cán cân giữa **Tốc độ (QPS)** 
 ### 1. Yêu cầu hệ thống (Hardware & Software)
 *   **Hệ điều hành:** Windows 10/11 hoặc Linux (Khuyến khích Ubuntu 22.04+).
 *   **Phần cứng tối thiểu:** CPU i3 đời 10+, RAM 8GB (TQ không yêu cầu nhiều RAM nhưng quá trình tải/chuẩn bị dữ liệu ban đầu cần RAM để xử lý).
-*   **Dung lượng ổ đĩa:** Cần trống ít nhất **20GB** (15GB cho tập dữ liệu thô và ~2GB cho các file index). Khuyến khích sử dụng **SSD NVMe (PCIe 3.0 x4 hoặc cao hơn)** để đạt tốc độ quét tốt nhất qua mmap.
+*   **Dung lượng ổ đĩa:** Cần trống ít nhất **40GB** (Dành cho việc tải 15GB dữ liệu thô, giải nén và lưu trữ các file Index đa dạng của TQ/FAISS). Khuyến khích sử dụng **SSD NVMe (PCIe 3.0 x4 hoặc cao hơn)** để đạt tốc độ quét tốt nhất qua mmap.
 *   **Python:** Phiên bản 3.10 trở lên.
 
 ### 2. Cài đặt thư viện lõi
