@@ -681,6 +681,9 @@ def load_vectors_torch(corpus_mm: np.memmap, chunk_rows: int) -> torch.Tensor:
 
 
 def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
+    # Define project_root based on script location (Benchmark/eval_alt/benchmark.py)
+    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    
     if args.hard_limit_mb > 0:
         enforce_memory_limit(args.hard_limit_mb)
         
