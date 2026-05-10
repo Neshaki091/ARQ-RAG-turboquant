@@ -27,9 +27,9 @@ import torch.nn.functional as F
 import faiss
 from sklearn.cluster import MiniBatchKMeans
 
-# Đường dẫn gốc dự án
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, project_root)
+# Đường dẫn Benchmark để load TQ_engine_lib nội bộ
+benchmark_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, benchmark_dir)
 
 from TQ_engine_lib.quantizer import TQEngine
 from TQ_engine_lib.tq_bridge import tq_native

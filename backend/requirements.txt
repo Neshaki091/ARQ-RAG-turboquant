@@ -1,11 +1,22 @@
 fastapi
 uvicorn
-qdrant-client
 pymupdf
-ollama
-torch
+torch --index-url https://download.pytorch.org/whl/cu121
+transformers
+sentence-transformers
 numpy
+faiss-cpu
+requests
 python-multipart
-supabase
 python-dotenv
+groq
+huggingface_hub
+datasets
+pandas
+pyarrow
 tqdm
+PyJWT
+passlib[bcrypt]
+scikit-learn
+python-jose[cryptography]
+httpx
