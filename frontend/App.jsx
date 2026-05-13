@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Send, Upload, FileText, Cpu, Search, Trash2, Book, Loader2, Sparkles, MessageSquare, Zap, Activity, Shield, LogOut, User, Lock, Layers } from 'lucide-react';
+import { Send, Upload, FileText, Cpu, Search, Trash2, Book, Loader2, Sparkles, MessageSquare, Zap, Activity, Shield, LogOut, User, Lock, Layers, Play } from 'lucide-react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 
@@ -20,9 +20,14 @@ export default function App() {
   const [scope, setScope] = useState("both"); // 'user', 'system', 'both'
   const [activeTab, setActiveTab] = useState('chat');
   const [simQueries, setSimQueries] = useState([]);
-  const [simCount, setSimCount] = useState(8);
   const [simResults, setSimResults] = useState({});
   const [isSimulating, setIsSimulating] = useState(false);
+  const [simCount, setSimCount] = useState(32); // Mặc định 32, tối đa 50
+  
+  // New States for Sessions
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState("default");
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   
   const [selectedDocChunks, setSelectedDocChunks] = useState(null);
   const [viewingDocName, setViewingDocName] = useState("");
@@ -38,9 +43,16 @@ export default function App() {
   useEffect(() => {
     if (token) {
       fetchUser();
-      fetchDocuments();
+      fetchSessions();
     }
   }, [token]);
+
+  useEffect(() => {
+    if (token && activeSessionId) {
+      fetchMessages(activeSessionId);
+      fetchDocuments(activeSessionId);
+    }
+  }, [activeSessionId, token]);
 
   useEffect(() => {
     if (user?.role === 'admin') {
@@ -103,14 +115,189 @@ export default function App() {
     }
   };
 
-  const fetchDocuments = async () => {
+  const fetchDocuments = async (sid) => {
     try {
-      const res = await axios.get(`${API_BASE}/documents`, {
+      const url = sid ? `${API_BASE}/documents?session_id=${sid}` : `${API_BASE}/documents`;
+      const res = await axios.get(url, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setDocuments(res.data.documents || []);
     } catch (err) {
       console.error("Failed to fetch documents", err);
+    }
+  };
+
+  const fetchSessions = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/sessions`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSessions(res.data.sessions || []);
+    } catch (err) {
+      console.error("Failed to fetch sessions", err);
+    }
+  };
+
+  const fetchMessages = async (sid) => {
+    if (!sid) return;
+    setIsHistoryLoading(true);
+    try {
+      const res = await axios.get(`${API_BASE}/sessions/${sid}/messages`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      // Convert backend roles to frontend roles
+      const formatted = res.data.messages.map(m => ({
+        role: m.role === 'assistant' ? 'bot' : 'user',
+        content: m.content,
+        timestamp: m.created_at
+      }));
+      setMessages(formatted);
+    } catch (err) {
+      console.error("Failed to fetch messages", err);
+    } finally {
+      setIsHistoryLoading(false);
+    }
+  };
+
+  const handleLoadBenchmark = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/benchmark/queries`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const all = Array.isArray(res.data) ? res.data : [];
+      if (all.length === 0) {
+        alert("Bộ câu hỏi rỗng!");
+        return;
+      }
+      // Lấy ngẫu nhiên theo số lượng simCount
+      const shuffled = [...all].sort(() => 0.5 - Math.random());
+      const selected = shuffled.slice(0, Math.min(simCount, 50)).map((q, idx) => {
+        let qText = "";
+        if (typeof q === 'string') qText = q;
+        else qText = q.question || q.text || q.query || "Câu hỏi không xác định";
+        
+        return {
+          id: idx,
+          question: qText,
+          status: 'idle',
+          answer: null,
+          latency: 0,
+          embed_latency: 0,
+          search_latency: 0,
+          chunks_count: 0,
+          chunks: [],
+          complexity: ""
+        };
+      });
+      setSimQueries(selected);
+      setSimResults({});
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi tải bộ câu hỏi benchmark!");
+    }
+  };
+
+  const runSimulation = async () => {
+    if (simQueries.length === 0) return;
+    setIsSimulating(true);
+    setSimResults(null);
+    
+    const startTime = Date.now();
+    let completedCount = 0;
+    let totalEmbed = 0;
+    let totalSearch = 0;
+
+    // Cập nhật trạng thái tất cả sang pending
+    setSimQueries(prev => prev.map(q => ({ ...q, status: 'pending', answer: null })));
+
+    // Gửi từng request một cách độc lập
+    const promises = simQueries.map(async (item, idx) => {
+      const qStartTime = Date.now();
+      try {
+        const res = await axios.post(`${API_BASE}/chat`, {
+          message: item.question,
+          user_id: user.id,
+          session_id: "simulation",
+          mode: mode,
+          scope: scope
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        const qEndTime = Date.now();
+        const qTotalWait = qEndTime - qStartTime;
+        const bRes = res.data;
+
+        totalEmbed += (bRes.embed_latency || 0);
+        totalSearch += (bRes.search_latency || 0);
+        completedCount++;
+
+        // Cập nhật kết quả cho đúng câu hỏi này ngay khi nó xong
+        setSimQueries(prev => {
+           const newQueries = [...prev];
+           newQueries[idx] = {
+              ...newQueries[idx],
+              status: 'success',
+              chunks_count: bRes.chunks_found || 0,
+              chunks: bRes.chunks || [],
+              complexity: bRes.complexity || "Average",
+              embed_latency: bRes.embed_latency || 0,
+              search_latency: bRes.search_latency || 0,
+              latency: qTotalWait // Thời gian chờ của riêng câu hỏi này
+           };
+           return newQueries;
+        });
+
+      } catch (err) {
+        console.error(`Query #${idx} failed:`, err);
+        setSimQueries(prev => {
+          const newQueries = [...prev];
+          newQueries[idx] = { ...newQueries[idx], status: 'error' };
+          return newQueries;
+        });
+      }
+    });
+
+    await Promise.all(promises);
+    
+    const totalDuration = Date.now() - startTime;
+    setSimResults({
+      totalTime: totalDuration,
+      avgLatency: totalDuration / simQueries.length,
+      avgEmbed: totalEmbed / simQueries.length,
+      avgSearch: totalSearch / simQueries.length,
+      throughput: (simQueries.length / (totalDuration / 1000)).toFixed(2)
+    });
+    
+    setIsSimulating(false);
+  };
+
+  const handleCreateSession = async () => {
+    const newId = `session_${Date.now()}`;
+    const title = prompt("Nhập tiêu đề cuộc trò chuyện mới:", "New Chat") || "New Chat";
+    try {
+      await axios.post(`${API_BASE}/sessions`, 
+        { session_id: newId, title: title },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      fetchSessions();
+      setActiveSessionId(newId);
+    } catch (err) {
+      alert("Lỗi khi tạo phiên mới!");
+    }
+  };
+
+  const handleDeleteSession = async (e, sid) => {
+    e.stopPropagation();
+    if (!confirm("Xóa cuộc trò chuyện này?")) return;
+    try {
+      await axios.delete(`${API_BASE}/sessions/${sid}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      fetchSessions();
+      if (activeSessionId === sid) setActiveSessionId("default");
+    } catch (err) {
+      alert("Lỗi khi xóa phiên!");
     }
   };
 
@@ -166,7 +353,12 @@ export default function App() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ message: input, mode: mode, scope: scope })
+        body: JSON.stringify({ 
+          message: input, 
+          mode: mode, 
+          scope: scope,
+          session_id: activeSessionId 
+        })
       });
 
       const reader = response.body.getReader();
@@ -251,7 +443,7 @@ export default function App() {
           "Authorization": `Bearer ${token}`
         }
       });
-      fetchDocuments();
+      fetchDocuments(activeSessionId);
     } catch (err) {
       alert("Lỗi khi tải lên!");
     } finally {
@@ -278,7 +470,7 @@ export default function App() {
       await axios.delete(`${API_BASE}/documents/${filename}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      fetchDocuments();
+      fetchDocuments(activeSessionId);
     } catch (err) {
       alert("Lỗi khi xóa tài liệu!");
     }
@@ -392,10 +584,36 @@ export default function App() {
             </div>
             <div className="upload-info">
               <span className="upload-title">Tải tài liệu mới</span>
-              <span className="upload-subtitle">Gắn với ID: {user?.id}</span>
+              <span className="upload-subtitle">Session: {activeSessionId}</span>
             </div>
             <input type="file" hidden onChange={handleUpload} accept=".pdf" disabled={uploading} />
           </label>
+        </div>
+
+        <div className="session-section">
+          <div className="section-header">
+            <MessageSquare size={16} />
+            <h3>HỘI THOẠI</h3>
+            <button className="new-chat-btn" onClick={handleCreateSession} title="Tạo phiên mới">+</button>
+          </div>
+          <div className="session-list">
+            <div 
+              className={`session-item ${activeSessionId === 'default' ? 'active' : ''}`}
+              onClick={() => setActiveSessionId('default')}
+            >
+              <div className="session-name">Mặc định (General)</div>
+            </div>
+            {sessions.map(s => (
+              <div 
+                key={s.id} 
+                className={`session-item ${activeSessionId === s.id ? 'active' : ''}`}
+                onClick={() => setActiveSessionId(s.id)}
+              >
+                <div className="session-name" title={s.title}>{s.title}</div>
+                <button className="sess-del" onClick={(e) => handleDeleteSession(e, s.id)}><Trash2 size={12} /></button>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="doc-section">
@@ -503,12 +721,113 @@ export default function App() {
               </div>
             ) : activeTab === 'simulate' ? (
               <div className="simulate-container">
-                <div className="sim-dashboard">
-                   <div className="welcome-screen">
-                      <Zap size={48} className="art-icon" />
-                      <h3>Chế độ Mô phỏng</h3>
-                      <p>Chạy các kịch bản kiểm thử hiệu năng và độ chính xác của ARQ-RAG.</p>
+                <div className="sim-header-row">
+                   <div className="sim-title">
+                      <Zap size={24} className="text-primary" />
+                      <h2>Simulation Mode</h2>
+                      <span className="badge">Dynamic Batching (500ms / 32 Max)</span>
                    </div>
+                   <div className="sim-header-actions">
+                      <div className="sim-count-input">
+                        <span>Số câu:</span>
+                        <input 
+                          type="number" 
+                          min="1" 
+                          max="50" 
+                          value={simCount} 
+                          onChange={(e) => setSimCount(Math.min(50, parseInt(e.target.value) || 1))}
+                          disabled={isSimulating}
+                        />
+                      </div>
+                      <button className="sim-btn secondary" onClick={handleLoadBenchmark} disabled={isSimulating}>
+                        <Search size={16} />
+                        Load {simCount} Queries
+                      </button>
+                      <button 
+                        className={`sim-btn primary ${isSimulating ? 'loading' : ''}`}
+                        onClick={runSimulation}
+                        disabled={isSimulating || simQueries.length === 0}
+                      >
+                        {isSimulating ? <Loader2 className="spin" size={16} /> : <Play size={16} />}
+                        Start Simulation
+                      </button>
+                   </div>
+                </div>
+
+                {simResults && simResults.totalTime && (
+                  <div className="sim-metrics-grid">
+                    <div className="sim-metric-card wait">
+                      <Zap size={16} className="icon-gold" />
+                      <span className="label">Total Wait</span>
+                      <span className="value">{(Number(simResults.totalTime) / 1000).toFixed(2)}s</span>
+                    </div>
+                    <div className="sim-metric-card embed">
+                      <Cpu size={16} className="icon-purple" />
+                      <span className="label">Avg Embed</span>
+                      <span className="value">{Math.round(simResults.avgEmbed)}ms</span>
+                    </div>
+                    <div className="sim-metric-card search">
+                      <Search size={16} className="icon-cyan" />
+                      <span className="label">Avg TQ Search</span>
+                      <span className="value">{simResults.avgSearch?.toFixed(2)}ms</span>
+                    </div>
+                    <div className="sim-metric-card highlight">
+                      <Activity size={16} className="icon-primary" />
+                      <span className="label">Throughput</span>
+                      <span className="value">{simResults.throughput || 0} Q/s</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="sim-grid">
+                  {simQueries.length === 0 ? (
+                    <div className="sim-empty">
+                       <Activity size={48} className="text-dim" />
+                       <p>Nhấn "Load 32 Queries" để bắt đầu mô phỏng kịch bản tải thực tế.</p>
+                    </div>
+                  ) : (
+                    simQueries.map((q) => (
+                      <div key={q.id} className={`sim-box ${q.status}`}>
+                          <div className="sim-box-header">
+                             <div className="sim-box-header-left">
+                               <span className="idx">#{q.id + 1}</span>
+                               {q.status === 'success' && (
+                                 <span className={`complexity-badge ${q.complexity?.toLowerCase()}`}>
+                                    {q.complexity}
+                                 </span>
+                               )}
+                             </div>
+                             {q.status === 'pending' && <Loader2 size={12} className="spin" />}
+                          </div>
+                         <div className="sim-question" title={q.question}>{q.question}</div>
+                         {q.status === 'success' && (
+                           <>
+                             <div className="sim-chunks-list">
+                                {q.chunks && q.chunks.map((c, ci) => (
+                                   <div key={ci} className="sim-chunk-item">
+                                      {c.text}
+                                   </div>
+                                ))}
+                             </div>
+                              <div className="sim-result-footer">
+                                <div className="sim-latency-box wait" title="Tổng thời gian chờ (User Experience)">
+                                   <Zap size={12} /> {q.latency}ms
+                                </div>
+                                <div className="sim-latency-box embed" title="Thời gian tạo Vector">
+                                   <Cpu size={12} /> {q.embed_latency}ms
+                                </div>
+                                <div className="sim-latency-box search" title="Thời gian TurboQuant Search">
+                                   <Search size={12} /> {q.search_latency}ms
+                                </div>
+                                <div className="sim-count-box">
+                                   {q.chunks_count} Chks
+                                </div>
+                             </div>
+                           </>
+                         )}
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             ) : (

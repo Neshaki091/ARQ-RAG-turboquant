@@ -1,0 +1,8 @@
+{
+  "dim": 768,
+  "bits": 4,
+  "qjl_scale": 0.00964446272701025,
+  "n_list": 16,
+  "n_probe": 32,
+  "deleted_ids": []
+}

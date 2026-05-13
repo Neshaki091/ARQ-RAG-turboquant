@@ -1,0 +1,14 @@
+/home/neshaki/project/backend/TQ_engine_lib/core/target/release/deps/libpyo3_build_config-26f5448dadc663dc.rmeta: /home/neshaki/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.22.6/src/lib.rs /home/neshaki/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.22.6/src/errors.rs /home/neshaki/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.22.6/src/impl_.rs /home/neshaki/project/backend/TQ_engine_lib/core/target/release/build/pyo3-build-config-1e444ff1d7d47a85/out/pyo3-build-config-file.txt /home/neshaki/project/backend/TQ_engine_lib/core/target/release/build/pyo3-build-config-1e444ff1d7d47a85/out/pyo3-build-config.txt
+
+/home/neshaki/project/backend/TQ_engine_lib/core/target/release/deps/libpyo3_build_config-26f5448dadc663dc.rlib: /home/neshaki/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.22.6/src/lib.rs /home/neshaki/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.22.6/src/errors.rs /home/neshaki/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.22.6/src/impl_.rs /home/neshaki/project/backend/TQ_engine_lib/core/target/release/build/pyo3-build-config-1e444ff1d7d47a85/out/pyo3-build-config-file.txt /home/neshaki/project/backend/TQ_engine_lib/core/target/release/build/pyo3-build-config-1e444ff1d7d47a85/out/pyo3-build-config.txt
+
+/home/neshaki/project/backend/TQ_engine_lib/core/target/release/deps/pyo3_build_config-26f5448dadc663dc.d: /home/neshaki/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.22.6/src/lib.rs /home/neshaki/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.22.6/src/errors.rs /home/neshaki/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.22.6/src/impl_.rs /home/neshaki/project/backend/TQ_engine_lib/core/target/release/build/pyo3-build-config-1e444ff1d7d47a85/out/pyo3-build-config-file.txt /home/neshaki/project/backend/TQ_engine_lib/core/target/release/build/pyo3-build-config-1e444ff1d7d47a85/out/pyo3-build-config.txt
+
+/home/neshaki/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.22.6/src/lib.rs:
+/home/neshaki/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.22.6/src/errors.rs:
+/home/neshaki/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-build-config-0.22.6/src/impl_.rs:
+/home/neshaki/project/backend/TQ_engine_lib/core/target/release/build/pyo3-build-config-1e444ff1d7d47a85/out/pyo3-build-config-file.txt:
+/home/neshaki/project/backend/TQ_engine_lib/core/target/release/build/pyo3-build-config-1e444ff1d7d47a85/out/pyo3-build-config.txt:
+
+# env-dep:CARGO_PKG_VERSION=0.22.6
+# env-dep:OUT_DIR=/home/neshaki/project/backend/TQ_engine_lib/core/target/release/build/pyo3-build-config-1e444ff1d7d47a85/out

@@ -1,6 +1,7 @@
 import os
 import sys
 import torch
+import numpy as np
 
 # Thêm đường dẫn để load các service
 backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -11,16 +12,15 @@ from services.ingestion_service import ingestion_service
 from services.metadata_service import metadata_service
 
 def quick_test():
-    print("--- TESTING RETRIEVAL SYSTEM ---")
+    print("--- TESTING RETRIEVAL SYSTEM (Multilingual E5) ---")
     
-    # 1. Khởi tạo
-    tq_service.load()
+    # 1. Khởi tạo (tq_service tự nạp index khi init)
     
     # 2. Thử tìm kiếm
-    query = "What is the capital of France?"
+    query = "Thủ đô của Việt Nam là gì?"
     print(f"QUERY: {query}")
     
-    # Lấy embedding (DPR)
+    # Lấy embedding (E5 Base)
     emb = ingestion_service.get_embeddings([query], is_query=True)
     
     # Search
@@ -42,17 +42,13 @@ def quick_test():
 
     # 3. Thử mapping sang Metadata (Service call)
     print("\n[STEP 2] Mapping to Metadata via TQService...")
-    results = tq_service.search(emb, top_k=5, scope="system")
+    results = tq_service.search(emb[0], user_id=-1, top_k=5, scope="system")
     
     print(f"RESULTS WITH TEXT CONTENT: {len(results)}")
     for i, res in enumerate(results):
-        payload = metadata_service.get_chunk_metadata(res['id'], user_id=-1)
+        payload = metadata_service.get_chunk(res['id'], user_id=-1)
         if payload:
-            print(f"--- Result {i+1} (Score: {res['score']:.4f}) ---")
-            print(f"Source: {payload.get('source', 'Unknown')}")
-            print(f"Text: {payload.get('text', 'No text found')[:150]}...")
-        else:
-            print(f"--- Result {i+1} (Score: {res['score']:.4f}) - [METADATA MISSING] ---")
+            print(f"  [{i+1}] Score: {res['score']:.4f} | Content: {payload['text'][:100]}...")
 
 if __name__ == "__main__":
     quick_test()

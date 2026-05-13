@@ -147,9 +147,9 @@ class TQEngine:
         """
         if os.path.exists(npy_path):
             self.raw_vectors = np.load(npy_path, mmap_mode='r')
-            print(f"🔗 TurboQuant: Raw data bound for Reranking (mmap): {npy_path}")
+            print(f"[LINK] TurboQuant: Raw data bound for Reranking (mmap): {npy_path}")
         else:
-            print(f"⚠️ Warning: Raw data file not found: {npy_path}")
+            print(f"[WARNING] Warning: Raw data file not found: {npy_path}")
 
     def index(self, x: Union[torch.Tensor, np.ndarray], online_clustering: bool = False, save_path: str = None):
         """
@@ -339,7 +339,7 @@ class TQEngine:
         if not isinstance(ivf, IVFData) or not self.dynamic_shards:
             return
 
-        print(f"🔄 TurboQuant: Merging {sum(len(v) for v in self.dynamic_shards.values())} new vectors into IVF...")
+        print(f"[MERGE] TurboQuant: Merging {sum(len(v) for v in self.dynamic_shards.values())} new vectors into IVF...")
 
         # 1. Thu thập dữ liệu mới và gộp mảng
         new_total_size = len(ivf.vector_ids) + sum(len(v) for v in self.dynamic_shards.values())
@@ -389,7 +389,7 @@ class TQEngine:
         
         # 4. Clear dynamic shards
         self.dynamic_shards.clear()
-        print(f"✨ Successfully merged into IVF index. New size: {new_total_size}")
+        print(f"[SUCCESS] Successfully merged into IVF index. New size: {new_total_size}")
 
     def delete(self, vector_id: int):
         """
@@ -457,12 +457,12 @@ class TQEngine:
             dim=self.dim,
             sq_bits=self.sq_bits,
             total_bits=self.bits,
-            qjl_scale=self.qjl_scale,
-            rot_op=self.rot_op_np,
-            res_norms=res_norms_np
-        )
+                    qjl_scale=self.qjl_scale,
+                    rot_op=self.rot_op_np,
+                    res_norms=res_norms_np
+                )
 
-    def search_batch(self, queries: torch.Tensor, top_k: int = 100, n_probe: int = None, allowed_ids: list = None) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+    def search_batch(self, queries: torch.Tensor, top_k: int = 100, n_probe: int = None, allowed_ids: Optional[List[int]] = None) -> List[Tuple[torch.Tensor, torch.Tensor]]:
         ivf = self.current_ivf_data
         if ivf is None:
             raise ValueError("No data indexed. Call index() first.")
@@ -503,33 +503,34 @@ class TQEngine:
             float(pq.qjl_scale),
             int(self.dim),
             int(self.sq_bits),
-            int(top_k * 10 if allowed_ids else top_k) # Lấy dư nếu cần lọc
+            int(top_k if allowed_ids is None else top_k * 10) # Lấy nhiều hơn nếu có filter để bù đắp
         )
         
         # 3. Map local IDs to global IDs and package results
         results = []
         global_ids = ivf.vector_ids
         allowed_set = set(allowed_ids) if allowed_ids is not None else None
-        
+
         for i in range(num_queries):
             valid_mask = indices[i] != -1
             q_indices = indices[i][valid_mask]
             q_scores = scores[i][valid_mask]
             
-            final_ids_list = []
-            final_scores_list = []
+            # Lấy global IDs
+            q_global_ids = global_ids[q_indices]
             
-            for idx, score in zip(q_indices, q_scores):
-                gid = int(global_ids[idx])
-                if allowed_set is None or gid in allowed_set:
-                    if gid not in self.deleted_ids:
-                        final_ids_list.append(gid)
-                        final_scores_list.append(score)
-                        if len(final_ids_list) >= top_k:
-                            break
+            # Lọc theo allowed_ids nếu có
+            if allowed_set is not None:
+                mask = np.isin(q_global_ids, list(allowed_set))
+                q_global_ids = q_global_ids[mask]
+                q_scores = q_scores[mask]
+                
+                # Cắt bớt về đúng top_k sau khi lọc
+                q_global_ids = q_global_ids[:top_k]
+                q_scores = q_scores[:top_k]
             
-            final_ids = torch.tensor(final_ids_list, dtype=torch.long, device=self.device)
-            final_scores = torch.tensor(final_scores_list, dtype=torch.float32, device=self.device)
+            final_ids = torch.from_numpy(q_global_ids.copy()).to(self.device)
+            final_scores = torch.from_numpy(q_scores.copy()).to(self.device)
             results.append((final_ids, final_scores))
             
         return results
@@ -567,7 +568,7 @@ class TQEngine:
         return results
 
 
-    def search(self, query: torch.Tensor, top_k: int = 100, n_probe: int = None, allowed_ids: list = None) -> tuple[torch.Tensor, torch.Tensor]:
+    def search(self, query: torch.Tensor, top_k: int = 100, n_probe: int = None, allowed_ids: Optional[List[int]] = None) -> tuple[torch.Tensor, torch.Tensor]:
         ivf = self.current_ivf_data
         if ivf is None:
             raise ValueError("No data indexed. Call index() first.")
@@ -763,16 +764,20 @@ class TQEngine:
         self.ivf_nprobe = meta["n_probe"]
         self.deleted_ids = set(meta["deleted_ids"])
         
-        # 2. Load mảng dữ liệu với mmap_mode='r' để tiết kiệm RAM tối đa
+        # 2. Load mảng dữ liệu (Mmap cho mảng lớn, RAM cho mảng nhỏ để tránh lock file trên Windows)
         coarse_centroids = torch.from_numpy(np.load(os.path.join(path, "coarse_centroids.npy"))).to(self.device)
         sq_codes = np.load(os.path.join(path, "sq_codes.npy"), mmap_mode='r')
         qjl_signs = np.load(os.path.join(path, "qjl_signs.npy"), mmap_mode='r')
-        norms = np.load(os.path.join(path, "norms.npy"), mmap_mode='r')
-        res_norms = np.load(os.path.join(path, "res_norms.npy"), mmap_mode='r')
-        vector_ids = np.load(os.path.join(path, "vector_ids.npy"), mmap_mode='r')
-        list_offsets = np.load(os.path.join(path, "list_offsets.npy"), mmap_mode='r')
-        rot_op = np.load(os.path.join(path, "rot_op.npy"), mmap_mode='r')
-        sq_centroids = np.load(os.path.join(path, "sq_centroids.npy"), mmap_mode='r')
+        
+        # Các file này nạp thẳng vào RAM để tránh lỗi lock file [Errno 22] khi ghi đè trên Windows
+        norms = np.load(os.path.join(path, "norms.npy"))
+        res_norms = np.load(os.path.join(path, "res_norms.npy"))
+        vector_ids = np.load(os.path.join(path, "vector_ids.npy"))
+        list_offsets = np.load(os.path.join(path, "list_offsets.npy"))
+        
+        # Các file nhỏ này hay bị lỗi [Errno 22] trên Windows nếu để mmap='r'
+        rot_op = np.load(os.path.join(path, "rot_op.npy"))
+        sq_centroids = np.load(os.path.join(path, "sq_centroids.npy"))
         
         self.rot_op_np = rot_op
         self.rot_op_t = torch.from_numpy(rot_op).to(self.device)

@@ -5,7 +5,6 @@ torch --index-url https://download.pytorch.org/whl/cu121
 transformers
 sentence-transformers
 numpy
-faiss-cpu
 requests
 python-multipart
 python-dotenv
@@ -17,6 +16,7 @@ pyarrow
 tqdm
 PyJWT
 passlib[bcrypt]
-scikit-learn
 python-jose[cryptography]
 httpx
+optimum
+onnxruntime

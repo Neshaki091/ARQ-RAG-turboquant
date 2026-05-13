@@ -1,6 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form
+from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from typing import Optional, List
 import uvicorn
 import os
 import psutil
@@ -9,7 +11,7 @@ import shutil
 import time
 import torch
 from dotenv import load_dotenv
-from groq import Groq
+from groq import AsyncGroq
 from itertools import cycle
 import asyncio
 
@@ -21,24 +23,239 @@ sys.path.insert(0, backend_dir)
 env_path = os.path.join(backend_dir, ".env")
 load_dotenv(dotenv_path=env_path)
 
-# Khởi tạo Groq Client
-groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+# Khởi tạo danh sách các Groq Client để xoay vòng (Tránh Rate Limit)
+groq_keys = [os.getenv(k) for k in os.environ if k.startswith("GROQ_API_KEY") and os.getenv(k)]
+if not groq_keys:
+    # Fallback nếu không tìm thấy key theo list, thử lấy key mặc định
+    default_key = os.getenv("GROQ_API_KEY")
+    if default_key:
+        groq_keys = [default_key]
 
-from backend.services.ingestion_service import ingestion_service
-from backend.services.metadata_service import metadata_service
-from backend.services.tq_service import tq_service
-from backend.services.import_service import import_service
-from backend.services.auth_service import auth_service
-from backend.services.sync_service import sync_service
+if groq_keys:
+    print(f"LOG: Initialized {len(groq_keys)} Groq API Keys for rotation.")
+    groq_clients_pool = cycle([AsyncGroq(api_key=k) for k in groq_keys])
+else:
+    print("WARNING: No GROQ_API_KEY found. AI features will be disabled.")
+    groq_clients_pool = None
+
+def get_groq_client():
+    """Lấy client tiếp theo trong vòng lặp"""
+    return next(groq_clients_pool) if groq_clients_pool else None
+
+from services.ingestion_service import ingestion_service
+from services.metadata_service import metadata_service
+from services.tq_service import tq_service
+from services.rerank_service import rerank_service
+from services.import_service import import_service
+from services.auth_service import auth_service
+from services.sync_service import sync_service
 from itertools import cycle
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends, BackgroundTasks
+from fastapi.concurrency import run_in_threadpool
+
+batcher = None
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global batcher
+    print("LOG: Starting DynamicBatcher...")
+    batcher = DynamicBatcher(batch_window=0.5, max_batch_size=32)
+    yield
 
 app = FastAPI(
+    lifespan=lifespan,
     title="DEMO ARQ-RAG API", 
     version="1.0.0",
     redirect_slashes=False
 )
+
+# --- DYNAMIC BATCHER FOR SIMULATION ---
+# Cấu hình n_probe cho các chế độ tìm kiếm
+MODE_CONFIG = {
+    "ultrafast": 16,
+    "fast": 32,
+    "balance": 64,
+    "accuracy": 64, # accuracy dùng n_probe 64 nhưng có thêm rerank
+    "adaptive": 32
+}
+
+def get_search_params(mode: str, difficulty: str):
+    """Xác định n_probe và use_rerank dựa trên mode và độ khó (Adaptive)"""
+    mode = mode.lower()
+    diff = difficulty.upper()
+    
+    if mode == "adaptive":
+        if diff == "EASY":
+            return 32, False # Tương đương FAST
+        elif diff == "AVERAGE":
+            return 64, False # Tương đương BALANCE
+        else:
+            return 64, True  # Tương đương ACCURACY (HARD/EXTRA)
+    
+    # Các chế độ cố định
+    n_probe = MODE_CONFIG.get(mode, 64)
+    use_rerank = (mode == "accuracy")
+    return n_probe, use_rerank
+
+class DynamicBatcher:
+    def __init__(self, batch_window=1.0, max_batch_size=16):
+        self.queue = []
+        self.batch_window = batch_window
+        self.max_batch_size = max_batch_size
+        self.lock = asyncio.Lock()
+        self.flush_event = asyncio.Event()
+        asyncio.create_task(self._worker())
+
+    async def add_query(self, query_data):
+        future = asyncio.get_event_loop().create_future()
+        async with self.lock:
+            self.queue.append((query_data, future))
+            # Nếu đủ 16 câu, kích hoạt xử lý ngay
+            if len(self.queue) >= self.max_batch_size:
+                self.flush_event.set()
+        return await future
+    async def _worker(self):
+        while True:
+            # Nếu hàng đợi trống, đợi item đầu tiên
+            while not self.queue:
+                await asyncio.sleep(0.05)
+            
+            # Đợi tối đa batch_window hoặc cho đến khi đủ 16 câu
+            try:
+                await asyncio.wait_for(self.flush_event.wait(), timeout=self.batch_window)
+            except asyncio.TimeoutError:
+                pass
+            
+            async with self.lock:
+                if not self.queue:
+                    continue
+                batch = self.queue[:self.max_batch_size]
+                self.queue = self.queue[self.max_batch_size:]
+                self.flush_event.clear()
+            
+            # Xử lý batch
+            asyncio.create_task(self.process_batch(batch))
+
+    async def process_batch(self, batch):
+        try:
+            queries = [item[0]['query'] for item in batch]
+            user_id = batch[0][0]['user_id']
+            session_id = batch[0][0]['session_id']
+            scope = batch[0][0].get('scope', 'both')
+            mode_val = batch[0][0].get('mode', 'balance').lower()
+            
+            # --- ĐO THỜI GIAN EMBEDDING ---
+            embed_start = time.time()
+            query_vectors = await run_in_threadpool(ingestion_service.get_embeddings, queries)
+            embed_latency = (time.time() - embed_start) * 1000 / len(queries) # Trung bình cho mỗi câu
+            
+            # --- AI ANALYSIS (BATCH PROMPT OPTIMIZED) ---
+            # Gom toàn bộ queries vào 1 lần gọi Groq duy nhất để tránh Rate Limit và tăng tốc x10
+            translated_queries, complexities = await analyze_queries_batch(queries)
+
+            # Lấy allowed_ids từ session đầu tiên
+            allowed_ids = metadata_service.get_ids_by_session(user_id, session_id)
+
+            # Lấy n_probe và rerank dựa trên mode
+            # Lấy n_probe và rerank dựa trên mode (đã có mode_val từ trên)
+            mode = mode_val
+            
+            # --- ĐỊNH NGHĨA K DỰA TRÊN ĐỘ KHÓ ---
+            K_MAP = {"EASY": 3, "AVERAGE": 5, "HARD": 10, "EXTRA": 15}
+            
+            # --- ĐO THỜI GIAN SEARCH ---
+            search_start = time.time()
+            
+            # Vì search_batch chạy cho cả batch, ta phải chọn n_probe cao nhất trong batch nếu dùng adaptive
+            # Hoặc đơn giản là dùng n_probe của mode nếu không phải adaptive
+            max_n_probe = 0
+            any_rerank = False
+            
+            batch_params = []
+            for diff in complexities:
+                np, rr = get_search_params(mode, diff)
+                batch_params.append((np, rr))
+                max_n_probe = max(max_n_probe, np)
+                if rr: any_rerank = True
+
+            # Nếu dùng rerank, ta lấy 4 * K candidates (lấy 40 cho an toàn)
+            results = await run_in_threadpool(tq_service.search_batch, 
+                query_vectors, 
+                user_id=user_id,
+                top_k=40 if any_rerank else 15, 
+                scope=scope,
+                allowed_ids=allowed_ids,
+                n_probe=max_n_probe,
+                use_rerank=any_rerank
+            )
+            search_latency = (time.time() - search_start) * 1000 / len(queries)
+            
+            # --- TỐI ƯU HÓA: FETCH METADATA BẰNG BATCH (CHỈ 1-2 LẦN TRUY VẤN DB) ---
+            all_result_ids = []
+            for r_list in results:
+                for r in r_list:
+                    all_result_ids.append(r['id'])
+            
+            # Lấy toàn bộ chunk metadata một lần duy nhất
+            all_chunks_raw = metadata_service.get_by_ids(
+                list(set(all_result_ids)), 
+                user_id=user_id, 
+                session_id=session_id, 
+                scope=scope
+            )
+            # Tạo map để truy xuất nhanh O(1)
+            chunks_map = {c.payload['id']: c.payload for c in all_chunks_raw}
+
+            for i, item in enumerate(batch):
+                diff = complexities[i]
+                target_k = K_MAP.get(diff, 5)
+                n_probe_val, use_rerank_val = batch_params[i]
+                
+                # Lấy candidates từ map đã fetch sẵn
+                candidates = []
+                for res in results[i]:
+                    c_payload = chunks_map.get(res['id'])
+                    if c_payload:
+                        candidates.append({
+                            "id": res['id'],
+                            "text": c_payload.get('text', ''),
+                            "source": c_payload.get('source', ''),
+                            "score": res['score']
+                        })
+                
+                # --- THỰC HIỆN RERANK NẾU CẦN ---
+                final_results = candidates
+                if use_rerank_val and candidates:
+                    final_results = await run_in_threadpool(
+                        rerank_service.rerank, 
+                        queries[i], 
+                        candidates, 
+                        target_k
+                    )
+                else:
+                    final_results = candidates[:target_k]
+                
+                # Format lại cho frontend
+                chunk_details = [{
+                    "text": r['text'][:200],
+                    "source": r['source']
+                } for r in final_results]
+                
+                item[1].set_result({
+                    "chunks_found": len(final_results),
+                    "chunks": chunk_details,
+                    "complexity": diff,
+                    "embed_latency": round(embed_latency, 2),
+                    "search_latency": round(search_latency, 2),
+                    "batch_mode": True
+                })
+        except Exception as e:
+            for item in batch:
+                if not item[1].done():
+                    item[1].set_exception(e)
+
+# Batcher will be initialized in lifespan
 
 # Enable CORS - Cho phép Vercel truy cập
 app.add_middleware(
@@ -56,11 +273,16 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Tự động nạp chỉ mục cũ và nạp Model ngay khi khởi động
 print("LOG: Initializing Backend Services...")
-# TQ Service nạp System Index tự động khi khởi tạo
+
+# 1. Tải dữ liệu từ Cloud về (nếu đang chạy trên HF)
+from services.sync_service import sync_service
+sync_service.download_from_hub()
+
+# 2. TQ Service nạp System Index tự động khi khởi tạo
 print("LOG: Backend Services Initialized.")
 
-# Nạp model DPR ngay lập tức để tránh latency câu đầu tiên
-print("LOG: Pre-loading Embedding Model...")
+# Nạp model Multilingual E5 Base ngay lập tức để tránh latency câu đầu tiên
+print("LOG: Pre-loading Multilingual E5 Base Embedding Model...")
 ingestion_service._lazy_load_model()
 print("SUCCESS: Embedding Model ready.")
 
@@ -83,7 +305,7 @@ async def trigger_worker(
     if secret != os.getenv("ADMIN_SECRET", "admin123"):
         raise HTTPException(status_code=403, detail="Invalid secret")
     
-    from backend.scripts.hf_worker import run_worker
+    from scripts.hf_worker import run_worker
     background_tasks.add_task(run_worker, limit=limit)
     return {"status": "started", "message": f"Worker is rebuilding {limit} chunks in background."}
 
@@ -118,13 +340,13 @@ def get_ai_response(prompt: str):
     except Exception as e:
         return f"Lỗi kết nối OpenRouter: {str(e)}"
 
-def analyze_query(query: str):
+async def analyze_query(query: str):
     """Gộp dịch thuật và phân loại độ khó vào 1 lần gọi duy nhất để tăng tốc 2x"""
-    if not os.getenv("GROQ_API_KEY"):
+    if not groq_keys:
         return query, "AVERAGE"
     prompt = f'[MANDATORY] Translate this into ENGLISH: "{query}" | Classify: EASY, AVERAGE, HARD, EXTRA. ONLY return: [TRANSLATION] | [DIFFICULTY]'
     try:
-        chat_completion = groq_client.chat.completions.create(
+        chat_completion = await get_groq_client().chat.completions.create(
             messages=[{"role": "user", "content": prompt}],
             model="llama-3.3-70b-versatile",
             max_tokens=100,
@@ -137,20 +359,59 @@ def analyze_query(query: str):
             parts = res.split(" | ")
             trans = parts[0].replace("Translation:", "").replace("TRANSLATION:", "").strip().strip('"')
             diff = parts[1].replace("Difficulty:", "").replace("DIFFICULTY:", "").strip().upper()
-            print(f"DEBUG: Translated: '{trans}' | Complexity: {diff}")
             return trans, diff
-            
-        return res.strip().strip('"'), "AVERAGE"
+        return query, "AVERAGE"
     except Exception as e:
-        print(f"DEBUG: Analyze Error: {e}")
+        print(f"ERROR Groq: {e}")
         return query, "AVERAGE"
 
-
+async def analyze_queries_batch(queries: list[str]):
+    """Gom toàn bộ danh sách câu hỏi vào 1 lần gọi Groq duy nhất (JSON Mode)"""
+    if not groq_keys or not queries:
+        return queries, ["AVERAGE"] * len(queries)
         
-
-
+    # Tạo danh sách đánh số để AI dễ phân biệt
+    numbered_queries = "\n".join([f"{i+1}. {q}" for i, q in enumerate(queries)])
+    
+    prompt = f"""
+    Analyze the following list of queries. For each query:
+    1. Translate it into English.
+    2. Classify difficulty as EASY, AVERAGE, HARD, or EXTRA.
+    
+    Return ONLY a JSON object with a key "results" containing a list of objects:
+    {{"results": [{{"translation": "...", "difficulty": "..."}}, ...]}}
+    
+    Queries:
+    {numbered_queries}
+    """
+    
+    try:
+        chat_completion = await get_groq_client().chat.completions.create(
+            messages=[{"role": "user", "content": prompt}],
+            model="llama-3.3-70b-versatile",
+            response_format={ "type": "json_object" },
+            temperature=0
+        )
+        res_text = chat_completion.choices[0].message.content
+        import json
+        data = json.loads(res_text)
+        results = data.get("results", [])
         
-
+        # Nếu AI trả về thiếu kết quả, điền mặc định
+        trans_list = []
+        diff_list = []
+        for i in range(len(queries)):
+            if i < len(results):
+                trans_list.append(results[i].get("translation", queries[i]))
+                diff_list.append(results[i].get("difficulty", "AVERAGE").upper())
+            else:
+                trans_list.append(queries[i])
+                diff_list.append("AVERAGE")
+        
+        return trans_list, diff_list
+    except Exception as e:
+        print(f"ERROR Batch Groq: {e}")
+        return queries, ["AVERAGE"] * len(queries)
 
 class RegisterRequest(BaseModel):
     username: str
@@ -161,11 +422,16 @@ class LoginRequest(BaseModel):
     password: str
 
 class ChatRequest(BaseModel):
-    message: str
+    message: Optional[str] = None
+    messages_batch: Optional[list[str]] = None
     mode: str = "balance" # "ultrafast", "fast", "balance", "accuracy", "adaptive"
     scope: str = "both" # "user", "system", "both"
     stream: bool = False
     session_id: str = "default"
+    session_title: str = None # Để đặt tiêu đề khi tạo session mới
+
+class SessionTitleRequest(BaseModel):
+    title: str
 
 security = HTTPBearer()
 
@@ -178,10 +444,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
-
-@app.get("/")
-async def root():
-    return {"message": "Welcome to DEMO ARQ-RAG API", "status": "online"}
 
 @app.post("/register")
 async def register(request: RegisterRequest):
@@ -237,35 +499,51 @@ async def get_system_stats():
 # Biến global lưu thời gian khởi động
 start_time = time.time()
 
+@app.get("/benchmark/queries")
+async def get_benchmark_queries():
+    import json
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "queries", "benchmark_queries_400.json")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data
+    return []
+
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 @app.post("/upload")
-async def upload_pdf(
+async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...), 
     session_id: str = Form("default"),
     current_user = Depends(get_current_user)
 ):
-    if not file.filename.endswith(".pdf"):
+    if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are supported")
     
-    file_path = os.path.join(UPLOAD_DIR, f"{current_user['id']}_{file.filename}")
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-    
     try:
-        num_chunks = ingestion_service.process_pdf(file_path, file.filename, user_id=current_user['id'], session_id=session_id)
+        # 1. Lưu file tạm thời lên đĩa
+        file_path = os.path.join(UPLOAD_DIR, f"{current_user['id']}_{int(time.time())}_{file.filename}")
+        with open(file_path, "wb") as buffer:
+            import shutil
+            shutil.copyfileobj(file.file, buffer)
+
+        # 2. Chạy tác vụ nặng trong thread pool với ĐƯỜNG DẪN file
+        await run_in_threadpool(ingestion_service.process_pdf, file_path, file.filename, user_id=current_user['id'], session_id=session_id)
         
         # Đồng bộ ngầm lên Cloud
         background_tasks.add_task(sync_service.sync_to_hub, str(current_user['id']))
         
-        return {"filename": file.filename, "chunks": num_chunks, "status": "success"}
+        return {"status": "success", "filename": file.filename}
     except Exception as e:
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/documents")
-async def list_documents(current_user = Depends(get_current_user)):
-    return {"documents": metadata_service.list_documents(user_id=current_user['id'])}
+async def list_documents(session_id: str = None, current_user = Depends(get_current_user)):
+    return {"documents": metadata_service.list_documents(user_id=current_user['id'], session_id=session_id)}
 
 @app.get("/documents/{filename}/chunks")
 async def get_document_chunks(filename: str, current_user = Depends(get_current_user)):
@@ -286,7 +564,7 @@ async def delete_document(
     current_user = Depends(get_current_user)
 ):
     try:
-        ingestion_service.delete_document(filename, user_id=current_user['id'])
+        await run_in_threadpool(ingestion_service.delete_document, filename, user_id=current_user['id'])
         
         # Đồng bộ ngầm việc xóa lên Cloud
         background_tasks.add_task(sync_service.sync_to_hub, str(current_user['id']))
@@ -294,6 +572,37 @@ async def delete_document(
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- SESSION ENDPOINTS ---
+
+@app.get("/sessions")
+async def get_sessions(current_user = Depends(get_current_user)):
+    return {"sessions": metadata_service.list_sessions(current_user['id'])}
+
+@app.post("/sessions")
+async def create_session(request: dict, current_user = Depends(get_current_user)):
+    session_id = request.get("session_id")
+    title = request.get("title", "New Chat")
+    if not session_id:
+        import uuid
+        session_id = str(uuid.uuid4())
+    metadata_service.create_session(session_id, current_user['id'], title)
+    return {"status": "success", "session_id": session_id}
+
+@app.get("/sessions/{session_id}/messages")
+async def get_messages(session_id: str, current_user = Depends(get_current_user)):
+    messages = metadata_service.get_session_messages(session_id, current_user['id'])
+    return {"messages": messages}
+
+@app.delete("/sessions/{session_id}")
+async def delete_session(session_id: str, current_user = Depends(get_current_user)):
+    metadata_service.delete_session(session_id, current_user['id'])
+    return {"status": "success"}
+
+@app.put("/sessions/{session_id}/title")
+async def update_session_title(session_id: str, request: SessionTitleRequest, current_user = Depends(get_current_user)):
+    metadata_service.update_session_title(session_id, current_user['id'], request.title)
+    return {"status": "success"}
 
 @app.post("/import-precomputed")
 async def import_precomputed_data(user_id: int = -1):
@@ -316,98 +625,60 @@ async def cleanup_indexes():
 from fastapi.responses import StreamingResponse
 import json
 
-class BatchChatRequest(BaseModel):
-    messages: list[str]
-    mode: str = "balance"
-    scope: str = "both"
-
-@app.post("/chat/batch")
-async def chat_batch_arq(request: BatchChatRequest, current_user = Depends(get_current_user)):
-    """
-    Xử lý hàng loạt câu hỏi cùng lúc để tận dụng Double Batching.
-    """
-    import traceback
-    try:
-        if not request.messages:
-            return {"results": []}
-            
-        mode = request.mode
-        
-        # 1. Embedding cho toàn bộ batch câu hỏi
-        try:
-            query_vectors = ingestion_service.get_embeddings(request.messages)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Embedding error: {str(e)}")
-            
-        # Chuyển sang Tensor float32 (quan trọng)
-        queries_t = torch.from_numpy(query_vectors).float()
-        
-        start_time = time.time()
-        target_top_k = 10
-        
-        # 2. Double Batching Retrieval
-        if mode == "ultrafast":
-            ranked = tq_service.search_batch(query_vectors, top_k=target_top_k, bits=4, nprobe=32, rerank_mult=1)
-        elif mode == "fast":
-            ranked = tq_service.search_batch(query_vectors, top_k=target_top_k, bits=4, nprobe=32, rerank_mult=6)
-        elif mode == "balance":
-            ranked = tq_service.search_batch(query_vectors, top_k=target_top_k, bits=4, nprobe=64, rerank_mult=6)
-        elif mode == "accuracy":
-            ranked = tq_service.search_batch(query_vectors, top_k=target_top_k, bits=4, nprobe=64, rerank_mult=10)
-        elif mode == "adaptive":
-            # Batch adaptive đơn giản hóa: dùng Balance cho toàn bộ batch
-            ranked = tq_service.search_batch(query_vectors, top_k=target_top_k, bits=4, nprobe=64, rerank_mult=6)
-        else: # Default
-            ranked = tq_service.search_batch(query_vectors, top_k=target_top_k, bits=4, nprobe=64, rerank_mult=6)
-
-        results_list = []
-        for ranked_items in ranked:
-            tq_ids = [item["id"] for item in ranked_items]
-            search_results = metadata_service.get_by_ids(tq_ids, user_id=current_user['id'], scope=request.scope)
-            results_list.append(search_results)
-
-        retrieval_latency = (time.time() - start_time) * 1000
-        
-        # 3. Tạo câu trả lời hàng loạt bằng Qwen Local
-        import asyncio
-        semaphore = asyncio.Semaphore(4)
-        loop = asyncio.get_running_loop()
-        
-        async def get_single_answer(query, results):
-            async with semaphore:
-                if not results: return "Không tìm thấy tài liệu liên quan."
-                context = "\n".join([r.payload.get('text', '')[:500] for r in results[:2]])
-                prompt = f"Dựa vào context sau, trả lời cực ngắn gọn (1 câu) cho câu hỏi: {query}\nContext: {context}"
-                try:
-                    return await loop.run_in_executor(None, get_ai_response, prompt)
-                except Exception as e:
-                    return f"Lỗi tạo câu trả lời: {str(e)}"
-
-        answer_tasks = [get_single_answer(request.messages[i], results_list[i]) for i in range(len(request.messages))]
-        answers = await asyncio.gather(*answer_tasks)
-
-        total_latency = (time.time() - start_time) * 1000
-        
-        return {
-            "retrieval_latency": f"{retrieval_latency:.2f}ms",
-            "total_latency": f"{total_latency/1000:.2f}s",
-            "throughput": f"{len(request.messages) / (retrieval_latency/1000):.2f} queries/sec",
-            "results": results_list,
-            "answers": answers
-        }
-    except Exception as e:
-        print("ERROR: CRITICAL ERROR IN /chat/batch:")
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.post("/chat")
 async def chat_arq(request: ChatRequest, current_user = Depends(get_current_user)):
+    user_id = current_user['id']
+    
+    # --- BATCH PROCESSING FOR SIMULATION ---
+    # Nếu có messages_batch, xử lý tất cả cùng lúc bằng Batcher
+    if request.messages_batch:
+        try:
+            tasks = [batcher.add_query({
+                "query": msg,
+                "user_id": user_id,
+                "session_id": request.session_id,
+                "scope": request.scope
+            }) for msg in request.messages_batch]
+            
+            batch_results = await asyncio.gather(*tasks)
+            return {
+                "batch_results": batch_results,
+                "batch_mode": True
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # --- DYNAMIC BATCHING FOR SINGLE REQUEST (SIMULATION MODE) ---
+    if not request.stream:
+        try:
+            # Gửi vào bộ gom lô 50ms
+            batch_result = await batcher.add_query({
+                "query": request.message,
+                "user_id": user_id,
+                "session_id": request.session_id,
+                "scope": request.scope
+            })
+            
+            return {
+                "answer": f"Simulation: Found {batch_result['chunks_found']} chunks",
+                "chunks_count": batch_result['chunks_found'],
+                "chunks": batch_result['chunks'],
+                "complexity": batch_result['complexity'],
+                "embed_latency": batch_result.get('embed_latency', 0),
+                "search_latency": batch_result.get('search_latency', 0),
+                "batch_mode": True
+            }
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail=str(e))
+
     query = request.message
     mode = request.mode.lower()
     start_time = time.time()
     
     # 1 & 2. Dịch câu hỏi và Phân loại độ khó (Gộp 1 lần gọi duy nhất)
-    translated_query, complexity = analyze_query(query)
+    translated_query, complexity = await run_in_threadpool(analyze_query, query)
     
     # Tính toán top_k động
     base_top_k = 5
@@ -439,7 +710,8 @@ async def chat_arq(request: ChatRequest, current_user = Depends(get_current_user
 
     # 4. Embedding & Retrieval
     try:
-        query_vector = ingestion_service.get_embeddings([translated_query], is_query=True)[0]
+        query_vector = await run_in_threadpool(ingestion_service.get_embeddings, [translated_query], True)
+        query_vector = query_vector[0]
         
         # Nếu dùng Accuracy, lấy nhiều ứng viên hơn để rerank
         retrieve_k = dynamic_top_k * 5 if use_cross_encoder else dynamic_top_k
@@ -450,7 +722,7 @@ async def chat_arq(request: ChatRequest, current_user = Depends(get_current_user
             # Lấy danh sách ID thuộc về User và Session hiện tại
             allowed_ids = metadata_service.get_ids_by_session(current_user['id'], request.session_id)
 
-        tq_results = tq_service.search(
+        tq_results = await run_in_threadpool(tq_service.search, 
             query_vector, 
             top_k=retrieve_k, 
             user_id=current_user['id'],
@@ -475,10 +747,10 @@ async def chat_arq(request: ChatRequest, current_user = Depends(get_current_user
                 from types import SimpleNamespace
                 hydrated_results.append(SimpleNamespace(id=res['id'], score=res['score'], payload=chunk))
 
-        # 5. Reranking (nếu cần)
+        # 5. Reranking (nếu cần) (Heavy Task)
         if use_cross_encoder and hydrated_results:
-            from backend.services.rerank_service import rerank_service
-            final_results = rerank_service.rerank(translated_query, hydrated_results, dynamic_top_k)
+            from services.rerank_service import rerank_service
+            final_results = await run_in_threadpool(rerank_service.rerank, translated_query, hydrated_results, dynamic_top_k)
         else:
             final_results = hydrated_results[:dynamic_top_k]
 
@@ -497,9 +769,16 @@ async def chat_arq(request: ChatRequest, current_user = Depends(get_current_user
     # 6. LLM Generation
     prompt = f"CÂU HỎI: {query}\n\nNGỮ CẢNH:\n{context}\n\nTRẢ LỜI:"
     
+    # 7. Save User Message to History
+    metadata_service.add_message(request.session_id, current_user['id'], "user", query)
+    # Cập nhật title nếu là session mới
+    if request.session_title:
+        metadata_service.update_session_title(request.session_id, current_user['id'], request.session_title)
+    
     display_latency = (time.time() - start_time) * 1000
     
     async def stream_generator():
+        full_ai_response = ""
         # 1. Gửi Metadata ngay lập tức
         source_list = list(set([r.payload.get('source', 'Unknown Document') for r in final_results]))
         source_list = [s for s in source_list if s and s != 'Unknown']
@@ -557,9 +836,14 @@ async def chat_arq(request: ChatRequest, current_user = Depends(get_current_user
                                 data = json.loads(data_str)
                                 content = data["choices"][0]["delta"].get("content", "")
                                 if content:
+                                    full_ai_response += content
                                     yield content
                             except:
                                 continue
+            
+            # 8. Save Assistant Message to History after streaming completes
+            if full_ai_response:
+                metadata_service.add_message(request.session_id, current_user['id'], "assistant", full_ai_response)
 
         except Exception as e:
             yield f"\nERROR: Lỗi Stream OpenRouter: {str(e)}"

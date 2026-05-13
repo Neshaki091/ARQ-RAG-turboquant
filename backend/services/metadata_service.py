@@ -59,7 +59,29 @@ class MetadataService:
                     session_id TEXT
                 )
             ''')
+            # 3. Bảng quản lý Phiên hội thoại
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS sessions (
+                    id TEXT PRIMARY KEY,
+                    user_id INTEGER,
+                    title TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            ''')
+            # 4. Bảng lưu trữ Tin nhắn
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS messages (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id TEXT,
+                    role TEXT, -- 'user' hoặc 'assistant'
+                    content TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY(session_id) REFERENCES sessions(id)
+                )
+            ''')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_user_session ON chunks(user_id, session_id)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_msg_session ON messages(session_id)')
 
     def add_user(self, username, password, role='user'):
         try:
@@ -150,10 +172,13 @@ class MetadataService:
             conn.commit()
             return ids
 
-    def list_documents(self, user_id: int = -1):
+    def list_documents(self, user_id: int = -1, session_id: str = None):
         with self._get_connection(user_id=user_id) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT DISTINCT source FROM chunks WHERE user_id = ?", (user_id,))
+            if session_id:
+                cursor.execute("SELECT DISTINCT source FROM chunks WHERE user_id = ? AND session_id = ?", (user_id, session_id))
+            else:
+                cursor.execute("SELECT DISTINCT source FROM chunks WHERE user_id = ?", (user_id,))
             return [row[0] for row in cursor.fetchall()]
 
     def get_count(self, user_id: int = -1):
@@ -212,6 +237,61 @@ class MetadataService:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM chunks WHERE source = ? AND user_id = ? ORDER BY id", (filename, user_id))
             return [dict(row) for row in cursor.fetchall()]
+
+    # --- SESSION & CHAT HISTORY METHODS ---
+
+    def create_session(self, session_id: str, user_id: int, title: str = "New Chat"):
+        with self._get_connection(user_id=user_id) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT OR IGNORE INTO sessions (id, user_id, title) VALUES (?, ?, ?)",
+                (session_id, user_id, title)
+            )
+            conn.commit()
+            return session_id
+
+    def list_sessions(self, user_id: int):
+        with self._get_connection(user_id=user_id) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM sessions WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+            return [dict(row) for row in cursor.fetchall()]
+
+    def delete_session(self, session_id: str, user_id: int):
+        with self._get_connection(user_id=user_id) as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+            cursor.execute("DELETE FROM sessions WHERE id = ? AND user_id = ?", (session_id, user_id))
+            conn.commit()
+
+    def add_message(self, session_id: str, user_id: int, role: str, content: str):
+        # Đảm bảo session tồn tại trước
+        self.create_session(session_id, user_id)
+        
+        with self._get_connection(user_id=user_id) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO messages (session_id, role, content) VALUES (?, ?, ?)",
+                (session_id, role, content)
+            )
+            conn.commit()
+            return cursor.lastrowid
+
+    def get_session_messages(self, session_id: str, user_id: int):
+        with self._get_connection(user_id=user_id) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT role, content, created_at FROM messages WHERE session_id = ? ORDER BY created_at ASC",
+                (session_id,)
+            )
+            return [dict(row) for row in cursor.fetchall()]
+
+    def update_session_title(self, session_id: str, user_id: int, title: str):
+        with self._get_connection(user_id=user_id) as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE sessions SET title = ? WHERE id = ? AND user_id = ?", (title, session_id, user_id))
+            conn.commit()
 
     def get_chunk_metadata(self, chunk_id: int, user_id: int = -1):
         # Alias cho get_chunk để tương thích ngược

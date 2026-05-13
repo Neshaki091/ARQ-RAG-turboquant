@@ -462,7 +462,7 @@ class TQEngine:
             res_norms=res_norms_np
         )
 
-    def search_batch(self, queries: torch.Tensor, top_k: int = 100, n_probe: int = None) -> List[Tuple[torch.Tensor, torch.Tensor]]:
+    def search_batch(self, queries: torch.Tensor, top_k: int = 100, n_probe: int = None, allowed_ids: Optional[List[int]] = None) -> List[Tuple[torch.Tensor, torch.Tensor]]:
         ivf = self.current_ivf_data
         if ivf is None:
             raise ValueError("No data indexed. Call index() first.")
@@ -503,18 +503,34 @@ class TQEngine:
             float(pq.qjl_scale),
             int(self.dim),
             int(self.sq_bits),
-            int(top_k)
+            int(top_k if allowed_ids is None else top_k * 10) # Lấy nhiều hơn nếu có filter để bù đắp
         )
         
         # 3. Map local IDs to global IDs and package results
         results = []
         global_ids = ivf.vector_ids
+        
+        allowed_set = set(allowed_ids) if allowed_ids is not None else None
+
         for i in range(num_queries):
             valid_mask = indices[i] != -1
             q_indices = indices[i][valid_mask]
             q_scores = scores[i][valid_mask]
             
-            final_ids = torch.from_numpy(global_ids[q_indices].copy()).to(self.device)
+            # Lấy global IDs
+            q_global_ids = global_ids[q_indices]
+            
+            # Lọc theo allowed_ids nếu có
+            if allowed_set is not None:
+                mask = np.isin(q_global_ids, list(allowed_set))
+                q_global_ids = q_global_ids[mask]
+                q_scores = q_scores[mask]
+                
+                # Cắt bớt về đúng top_k sau khi lọc
+                q_global_ids = q_global_ids[:top_k]
+                q_scores = q_scores[:top_k]
+            
+            final_ids = torch.from_numpy(q_global_ids.copy()).to(self.device)
             final_scores = torch.from_numpy(q_scores.copy()).to(self.device)
             results.append((final_ids, final_scores))
             
@@ -553,7 +569,7 @@ class TQEngine:
         return results
 
 
-    def search(self, query: torch.Tensor, top_k: int = 100, n_probe: int = None) -> tuple[torch.Tensor, torch.Tensor]:
+    def search(self, query: torch.Tensor, top_k: int = 100, n_probe: int = None, allowed_ids: Optional[List[int]] = None) -> tuple[torch.Tensor, torch.Tensor]:
         ivf = self.current_ivf_data
         if ivf is None:
             raise ValueError("No data indexed. Call index() first.")
@@ -567,7 +583,7 @@ class TQEngine:
             if query.dim() == 1:
                 query = query.unsqueeze(0)
             
-            results = self.search_batch(query, top_k=top_k, n_probe=n_probe)
+            results = self.search_batch(query, top_k=top_k, n_probe=n_probe, allowed_ids=allowed_ids)
             return results[0] # Trả về kết quả của query duy nhất
         else:
             return self._native_cosine_search_flat(query, ivf, top_k)

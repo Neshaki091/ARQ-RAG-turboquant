@@ -113,32 +113,46 @@ Hệ thống lõi đã trải qua bài kiểm tra chịu tải cực hạn (Stre
 
 **Kết luận cốt lõi:** Các thư viện chuẩn công nghiệp như FAISS gặp **Nút thắt Bộ nhớ (Memory Wall)** khi Scale-up do cơ chế nạp toàn bộ mảng dữ liệu vào RAM (Heap). Ngược lại, **TurboQuant** với kiến trúc **Zero-Copy Memory Mapping (`mmap`)** kết hợp Rust SIMD chỉ tiêu tốn đúng ~12MB RAM, cho phép truy xuất khối lượng dữ liệu khổng lồ ngay trên các thiết bị giới hạn tài nguyên. TQ-IVF 4-bit đạt độ chính xác vượt trội (P@64 > 91%) trong khi vẫn duy trì mức tiêu thụ RAM tối thiểu.
 
-### 📊 Phân tích Trực quan (Visualization)
+### 📊 Phân tích Trực quan & Các Chỉ Số Đo Lường (Metrics)
 
 Để trực quan hóa các con số trên, bạn có thể sử dụng script `visualize_results.py` đi kèm:
 ```bash
 python Benchmark/eval_alt/visualize_results.py
 ```
 
-Các biểu đồ sau đây minh họa sức mạnh của TurboQuant:
+Dưới đây là các định nghĩa và đồ thị thể hiện sức mạnh của hệ thống TurboQuant so với các chuẩn công nghiệp (FAISS):
 
-#### 1. Biểu đồ Độ chính xác (Accuracy Curves)
-| Top-1 Probability (2-bit) | Top-1 Probability (4-bit) |
+#### 1. Sự đánh đổi giữa Chất lượng và Tốc độ (NDCG@16 / Recall@16 vs QPS)
+**Định nghĩa:**
+*   **Recall@K (Intersection Recall):** Thể hiện phần trăm số lượng vector chuẩn (Ground Truth) được giữ lại trong K kết quả tìm kiếm. Rất quan trọng đối với RAG vì LLM cần đa dạng ngữ cảnh để tổng hợp thông tin.
+*   **NDCG@K (Normalized Discounted Cumulative Gain):** Thước đo quan trọng nhất cho RAG. Nó không chỉ xem xét thuật toán có tìm đúng tài liệu hay không, mà còn đánh giá xem tài liệu tốt nhất có được **xếp hạng cao nhất** (đưa lên đầu Prompt) hay không.
+*   **QPS (Queries Per Second):** Tốc độ thông lượng (Throughput) của hệ thống khi chạy lô (Batching).
+
+**Biểu đồ (Cột là Accuracy, Đường đứt nét là QPS):**
+| Chất lượng Xếp hạng (NDCG@16 & QPS) | Chất lượng Thu hồi (Recall@16 & QPS) |
 | :---: | :---: |
-| ![Top-1 2b](./benchmark_result/charts/top1_2b.png) | ![Top-1 4b](./benchmark_result/charts/top1_4b.png) |
+| ![NDCG 16](./benchmark_result/charts/ndcg_16_bar_with_qps.png) | ![Recall 16](./benchmark_result/charts/recall_16_bar_with_qps.png) |
 
-| Set Recall@K (2-bit) | Set Recall@K (4-bit) |
-| :---: | :---: |
-| ![Recall 2b](./benchmark_result/charts/recall_2b.png) | ![Recall 4b](./benchmark_result/charts/recall_4b.png) |
+**Phân tích:** 
+Ở phiên bản nén 4-bit, TurboQuant đánh bại hoàn toàn FAISS PQ/SQ về cả NDCG (81.6% > 77.7%) lẫn Recall (74.2% > 69.1%), đồng thời nhỉnh hơn về tốc độ QPS. Ở cấu hình cực hạn 2-bit, TQ duy trì độ chính xác tương đương FAISS PQ, chấp nhận giảm QPS một chút để đánh đổi lấy sự kỳ diệu về kiến trúc bộ nhớ ở phần dưới.
 
-#### 2. Biểu đồ Hiệu năng (Efficiency)
-Biểu đồ này so sánh trực tiếp cán cân giữa **Tốc độ (QPS)** và **Bộ nhớ (RAM)**. Lưu ý cột RAM của FAISS cao vọt và gây lỗi OOM ở quy mô lớn, trong khi TQ giữ mức RAM gần như không đổi.
+#### 2. Phá vỡ bức tường bộ nhớ (The Memory Wall)
+**Định nghĩa:**
+*   **Private RAM (Màu xanh - Bắt buộc):** Lượng bộ nhớ cứng mà ứng dụng phải cấp phát (`malloc`) và chiếm giữ. Nếu cạn dung lượng này, ứng dụng sẽ sập (Crash / Out of Memory).
+*   **Working Set / Page Cache (Màu cam - Linh hoạt):** Vùng RAM mà Hệ điều hành cho ứng dụng mượn tạm để chứa file đọc từ ổ cứng. Nếu máy tính hết RAM cho việc khác, OS sẽ tự động thu hồi vùng này mà không làm chết ứng dụng RAG.
 
 ![Efficiency Comparison](./benchmark_result/charts/efficiency_comparison.png)
 
-**Kết luận từ biểu đồ:**
-- **TQ-IVF (np=64)** đạt độ chính xác tương đương FAISS-PQ nhưng sử dụng RAM ít hơn **~80 lần**.
-- Khả năng mở rộng (Scalability) của TQ là vượt trội nhờ cơ chế `mmap`, không bị phụ thuộc vào dung lượng RAM vật lý khi nạp dữ liệu.
+**Phân tích:** 
+Các thuật toán In-memory truyền thống như FAISS theo đuổi triết lý 'Đổi dung lượng lấy Tốc độ', nạp toàn bộ 5 triệu vector trực tiếp vào Private RAM, gây tiêu tốn khổng lồ (~1.9 GB) $\to$ Không thể triển khai trên các thiết bị Edge AI (IoT, Raspberry Pi, Laptop yếu). Ngược lại, TurboQuant thiết lập tiêu chuẩn mới với kỹ thuật **Zero-copy (Mmap)** bằng Rust, chỉ tốn vỏn vẹn **~20MB Private RAM** (giảm gần 100 lần) để chứa các điểm Tâm cụm (Centroids), đẩy toàn bộ khối lượng vector khổng lồ sang Page Cache linh hoạt của Hệ điều hành. Đây là bước đột phá kỹ thuật cốt lõi của đồ án.
+
+#### 3. Độ biến dạng lượng tử hóa (MSE - Mean Squared Error)
+**Định nghĩa:** MSE đo lường sai số vật lý bình phương giữa vector sau khi giải nén so với vector Float32 nguyên bản. MSE càng nhỏ, vector nén càng giống vector gốc.
+
+![MSE Comparison](./benchmark_result/charts/mse_comparison.png)
+
+**Phân tích:** 
+Phương pháp lượng tử hóa thặng dư QJL của TurboQuant tập trung vào việc **bảo toàn góc** (Cosine Similarity) để tối ưu độ chính xác ngữ nghĩa cho văn bản, thay vì tối ưu sai số Euclid như mạng Codebook của FAISS. Kết quả là MSE của TQ đóng vai trò là một chỉ số tham khảo vật lý (mang tính ước lượng lý thuyết do tính chất Irreversible của mã Sign-bit). Thực tế đo lường thực nghiệm (NDCG/Recall ở trên) chứng minh khả năng bảo toàn hướng vector của TQ ưu việt hơn hẳn, giúp chất lượng xếp hạng tốt hơn bất chấp đánh đổi về MSE.
 
 ## 🛠 Hướng dẫn chạy Benchmark Lõi (eval_alt)
 

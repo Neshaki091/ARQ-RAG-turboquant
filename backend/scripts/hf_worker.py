@@ -84,7 +84,7 @@ def save_and_push(all_embeddings, repo_id, token):
     tq_service.system_engine.ivf_nlist = 4096
     tq_service.system_engine.index(vectors)
     
-    save_path = os.path.join(tq_service.data_dir, "tq_index_system_e5")
+    save_path = os.path.join(tq_service.data_dir, "tq_index_4bit_np4096_system")
     tq_service.system_engine.save_index(save_path)
     
     if repo_id and token:

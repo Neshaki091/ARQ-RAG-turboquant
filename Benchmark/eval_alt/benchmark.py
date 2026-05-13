@@ -48,8 +48,100 @@ except ImportError:
 # --- Metric (giữ nguyên benchmark_recall) ---
 
 
+def compute_ndcg(predicted_indices, ground_truth_indices, k):
+    """
+    Tính NDCG@K (Normalized Discounted Cumulative Gain).
+    Sử dụng binary relevance: rel=1 nếu nằm trong ground truth Top-K, ngược lại 0.
+    """
+    gt_set = set(ground_truth_indices[:k])
+    if not gt_set:
+        return 0.0
+    dcg = 0.0
+    for i, idx in enumerate(predicted_indices[:k]):
+        if idx in gt_set:
+            dcg += 1.0 / np.log2(i + 2)  # log2(rank+1), rank là 1-indexed
+    # IDCG: trường hợp lý tưởng - toàn bộ ground truth nằm ở đầu danh sách
+    idcg = sum(1.0 / np.log2(i + 2) for i in range(min(k, len(gt_set))))
+    return dcg / idcg if idcg > 0 else 0.0
+
+
+def compute_mse_faiss(faiss_index, corpus_mm, num_sample: int = 1000, seed: int = 42) -> float:
+    """
+    Tính MSE lượng tử hóa cho FAISS index. 
+    Sử dụng downcast để đảm bảo gọi được make_direct_map trên các index IVF.
+    """
+    try:
+        import faiss
+        # Downcast để truy cập vào các phương thức của IndexIVF
+        idx_ivf = faiss.downcast_index(faiss_index)
+        if hasattr(idx_ivf, "make_direct_map"):
+            idx_ivf.make_direct_map()
+            
+        rng = np.random.default_rng(seed)
+        n = corpus_mm.shape[0]
+        indices = rng.choice(n, min(num_sample, n), replace=False)
+        originals = np.asarray(corpus_mm[indices], dtype=np.float32)
+        
+        recon_list = []
+        for idx in indices:
+            try:
+                # Ép kiểu int cho chắc chắn
+                v_recon = faiss_index.reconstruct(int(idx))
+                recon_list.append(v_recon)
+            except Exception:
+                continue
+                
+        if len(recon_list) < 10: # Không đủ mẫu để kết luận
+            return float('nan')
+            
+        reconstructed = np.array(recon_list, dtype=np.float32)
+        # Nếu sample_idx bị lọc mất do lỗi reconstruct, ta phải lấy đúng originals tương ứng
+        # Nhưng ở đây ta append lần lượt nên recon_list khớp với originals nếu không lỗi.
+        # Để an toàn, ta lấy lại originals khớp với số lượng recon thành công
+        originals_matched = originals[:len(reconstructed)]
+        
+        diff = originals_matched - reconstructed
+        mse = np.mean(np.sum(diff ** 2, axis=1))
+        
+        # Nếu MSE quá thấp (gần như bằng 0) với PQ/SQ thì chắc chắn là lỗi reconstruct
+        if mse < 1e-10:
+            return float('nan')
+            
+        return float(mse)
+    except Exception:
+        return float('nan')
+
+
+def compute_mse_tq(engine, corpus_mm, num_sample: int = 2000, seed: int = 42) -> float:
+    """
+    Tính MSE lượng tử hóa cho TQ engine.
+    Phương pháp chính xác nhất: Tận dụng mảng res_norms (sai số vật lý thực tế sau Stage 1 SQ).
+    Stage 2 (QJL 1-bit) làm giảm sai số này thêm một hệ số lý thuyết (1 - 2/pi) theo định lý Johnson-Lindenstrauss.
+    """
+    try:
+        ivf = engine.current_ivf_data
+        if ivf is None or not hasattr(ivf, "pq_data"):
+            return float('nan')
+        
+        pq = ivf.pq_data
+        
+        # Lấy sai số vật lý thực tế đã được đo trong quá trình nén (SQ Stage)
+        res_norms = np.asarray(pq.res_norms, dtype=np.float32)
+        mse_sq = np.mean(res_norms ** 2)
+        
+        # Hệ số giảm sai số lý thuyết của QJL 1-bit
+        # Đối với phân phối tiệm cận Gaussian, nén dấu 1-bit giảm MSE đi ~ (1 - 2/pi)
+        qjl_factor = 1.0 - (2.0 / np.pi)
+        mse_final = mse_sq * qjl_factor
+        
+        return float(mse_final)
+    except Exception as e:
+        print(f"  [MSE-TQ] Lỗi khi tính MSE: {e}")
+        return float('nan')
+
+
 def measure_accuracy(predicted_indices, ground_truth_indices, k_values):
-    metrics = {"top1_in_k": {}, "set_recall": {}}
+    metrics = {"top1_in_k": {}, "set_recall": {}, "ndcg": {}}
     gt_top1 = ground_truth_indices[0]
 
     for k in k_values:
@@ -57,6 +149,7 @@ def measure_accuracy(predicted_indices, ground_truth_indices, k_values):
         metrics["top1_in_k"][k] = 1.0 if gt_top1 in pred_set else 0.0
         gt_set = set(ground_truth_indices[:k])
         metrics["set_recall"][k] = len(pred_set.intersection(gt_set)) / k if k > 0 else 0.0
+        metrics["ndcg"][k] = compute_ndcg(predicted_indices, ground_truth_indices, k)
 
     return metrics
 
@@ -484,15 +577,22 @@ def evaluate_sq_batch(codes_mm, queries_t, ground_truth, k_values, meta):
     # Tính Accuracy
     all_top1 = {k: [] for k in k_values}
     all_recall = {k: [] for k in k_values}
+    all_ndcg = {k: [] for k in k_values}
     for qi in range(num_queries):
         top_indices = [idx for val, idx in sorted(heaps[qi], key=lambda x: -x[0])]
         m = measure_accuracy(top_indices, ground_truth[qi], k_values)
         for k in k_values:
             all_top1[k].append(m["top1_in_k"][k])
             all_recall[k].append(m["set_recall"][k])
+            all_ndcg[k].append(m["ndcg"][k])
 
     qps = num_queries / (time.perf_counter() - start)
-    return {k: np.mean(all_top1[k])*100 for k in k_values}, {k: np.mean(all_recall[k])*100 for k in k_values}, qps
+    return (
+        {k: np.mean(all_top1[k])*100 for k in k_values},
+        {k: np.mean(all_recall[k])*100 for k in k_values},
+        {k: np.mean(all_ndcg[k])*100 for k in k_values},
+        qps,
+    )
 
 def evaluate_tq_batch(engine, queries_t, ground_truth, k_values):
     """Evaluate TQ dùng Native Batch Search (SIMD Rust) như trong stress_5m.py"""
@@ -530,6 +630,7 @@ def evaluate_tq_batch(engine, queries_t, ground_truth, k_values):
     duration = time.perf_counter() - start
     
     # 3. Tính toán Accuracy
+    all_ndcg = {k: [] for k in k_values}
     global_vector_ids = ivf.vector_ids
     for i in range(num_queries):
         # Lấy ID thực tế từ kết quả index của Rust
@@ -538,9 +639,15 @@ def evaluate_tq_batch(engine, queries_t, ground_truth, k_values):
         for k in k_values:
             all_top1[k].append(m["top1_in_k"][k])
             all_recall[k].append(m["set_recall"][k])
-            
+            all_ndcg[k].append(m["ndcg"][k])
+
     qps = num_queries / duration
-    return {k: np.mean(all_top1[k])*100 for k in k_values}, {k: np.mean(all_recall[k])*100 for k in k_values}, qps
+    return (
+        {k: np.mean(all_top1[k])*100 for k in k_values},
+        {k: np.mean(all_recall[k])*100 for k in k_values},
+        {k: np.mean(all_ndcg[k])*100 for k in k_values},
+        qps,
+    )
 
 
 def evaluate_tq_native(vectors, queries, ground_truth, k_values, bits=4):
@@ -578,6 +685,7 @@ def evaluate_tq_native(vectors, queries, ground_truth, k_values, bits=4):
 
     all_top1 = {k: [] for k in k_values}
     all_recall = {k: [] for k in k_values}
+    all_ndcg = {k: [] for k in k_values}
 
     for i in range(num_queries):
         top_indices = batch_indices[i].tolist()
@@ -585,11 +693,13 @@ def evaluate_tq_native(vectors, queries, ground_truth, k_values, bits=4):
         for k in k_values:
             all_top1[k].append(m["top1_in_k"][k])
             all_recall[k].append(m["set_recall"][k])
+            all_ndcg[k].append(m["ndcg"][k])
 
     qps = num_queries / duration
     m_top1 = {k: np.mean(all_top1[k]) * 100 for k in k_values}
     m_recall = {k: np.mean(all_recall[k]) * 100 for k in k_values}
-    return m_top1, m_recall, qps
+    m_ndcg = {k: np.mean(all_ndcg[k]) * 100 for k in k_values}
+    return m_top1, m_recall, m_ndcg, qps
 
 
 def evaluate_tq_ivf(
@@ -644,6 +754,7 @@ def evaluate_tq_ivf(
 
     all_top1 = {k: [] for k in k_values}
     all_recall = {k: [] for k in k_values}
+    all_ndcg = {k: [] for k in k_values}
     global_vector_ids = ivf.vector_ids
 
     for i in range(len(queries)):
@@ -661,11 +772,13 @@ def evaluate_tq_ivf(
         for k in k_values:
             all_top1[k].append(m["top1_in_k"][k])
             all_recall[k].append(m["set_recall"][k])
+            all_ndcg[k].append(m["ndcg"][k])
 
     qps = len(queries) / (time.perf_counter() - start)
     m_top1 = {k: np.mean(all_top1[k]) * 100 for k in k_values}
     m_recall = {k: np.mean(all_recall[k]) * 100 for k in k_values}
-    return m_top1, m_recall, qps
+    m_ndcg = {k: np.mean(all_ndcg[k]) * 100 for k in k_values}
+    return m_top1, m_recall, m_ndcg, qps
 
 
 def load_vectors_torch(corpus_mm: np.memmap, chunk_rows: int) -> torch.Tensor:
@@ -917,7 +1030,15 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
                 engine = TQEngine(dim=dim, bits=bits, device="cpu", use_ivf=True, ivf_nlist=nlist)
                 engine.load_index(tq_path)
                 
-                for nprobe in nprobe_list:
+                # Compute NDCG and MSE for TQ only once (not per nprobe)
+                tq_mse = compute_mse_tq(engine, corpus_mm)
+                print(f"  TQ-IVF {bits}b (nlist={nlist}) Quantization MSE = {tq_mse:.6f}")
+
+                current_nprobes = list(nprobe_list)
+                if nlist == 8192 and 128 not in current_nprobes:
+                    current_nprobes.append(128)
+
+                for nprobe in current_nprobes:
                     engine.ivf_nprobe = nprobe
                     print(f"Evaluating TQ-IVF {bits}b (nlist={nlist}, nprobe={nprobe}, rerank_mult={tq_rerank_mult})...")
                     start_t = time.time()
@@ -942,30 +1063,37 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
                         else:
                             keep = min(max(k_values), candidate_ids.size)
                             I[i, :keep] = candidate_ids[:keep]
-                    
-                    m_t, m_r = {}, {}
+
+                    m_t, m_r, m_ndcg_tq = {}, {}, {}
                     for k in k_values:
-                        acc, rec = 0, 0
+                        acc, rec, ndcg_sum = 0, 0, 0.0
                         for i in range(len(queries_t)):
-                            pred = I[i, :k]
+                            pred = I[i, :k].tolist()
                             if ground_truth[i, 0] in pred: acc += 1
-                            gt_set, pred_set = set(ground_truth[i, :k]), set(pred)
+                            gt_full = ground_truth[i].tolist()
+                            gt_set, pred_set = set(gt_full[:k]), set(pred)
                             rec += len(gt_set.intersection(pred_set)) / k
-                        m_t[k], m_r[k] = (acc / len(queries_t)) * 100, (rec / len(queries_t)) * 100
+                            ndcg_sum += compute_ndcg(pred, gt_full, k)
+                        n_q = len(queries_t)
+                        m_t[k] = (acc / n_q) * 100
+                        m_r[k] = (rec / n_q) * 100
+                        m_ndcg_tq[k] = (ndcg_sum / n_q) * 100
 
                     priv_now, rss_now = get_ram_info()
                     ram_priv_inc = max(0.0, priv_now - priv_before)
 
                     rr_tag = f" rr{x}" if (x := tq_rerank_mult) > 1 else ""
                     results.append({
-                        "label": f"TQ-IVF nl{nlist} np{nprobe} {bits}b{rr_tag}", 
-                        "top1": m_t, "recall": m_r, "qps": qps, 
-                        "priv_mb": ram_priv_inc, "rss_mb": rss_now
+                        "label": f"TQ-IVF nl{nlist} np{nprobe} {bits}b{rr_tag}",
+                        "top1": m_t, "recall": m_r, "ndcg": m_ndcg_tq,
+                        "mse": tq_mse,
+                        "qps": qps,
+                        "priv_mb": ram_priv_inc, "rss_mb": rss_now,
                     })
-                    
+
                     # Dọn dẹp Page Cache ngay sau mỗi nprobe để lượt sau đo chính xác
-                    empty_working_set() 
-                
+                    empty_working_set()
+
                 del engine
                 gc.collect()
                 empty_working_set()
@@ -979,38 +1107,47 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
                     gc.collect()
                     priv_before, rss_before = get_ram_info()
                     sq_faiss_index = faiss.read_index(sq_faiss_path)
-                    
+
                     priv_now, _ = get_ram_info()
                     ram_sq = max(0.0, priv_now - priv_before)
-                    
+
+                    # MSE cho FAISS SQ
+                    sq_mse = compute_mse_faiss(sq_faiss_index, corpus_mm)
+                    print(f"  FAISS-SQ {bits}b Quantization MSE = {sq_mse:.6f}")
+
                     sq_faiss_index.nprobe = 64
-                    
+
                     start_sq = time.time()
                     D, I = sq_faiss_index.search(queries_t.cpu().numpy(), max(k_values))
                     qps_sq = len(queries_t) / (time.time() - start_sq)
-                    
-                    m_t_sq, m_r_sq = {}, {}
+
+                    m_t_sq, m_r_sq, m_ndcg_sq = {}, {}, {}
                     for k in k_values:
-                        acc, rec = 0, 0
+                        acc, rec, ndcg_sum = 0, 0, 0.0
                         for i in range(len(queries_t)):
-                            pred = I[i, :k]
+                            pred = I[i, :k].tolist()
                             if ground_truth[i, 0] in pred: acc += 1
-                            gt_set, pred_set = set(ground_truth[i, :k]), set(pred)
+                            gt_set, pred_set = set(ground_truth[i, :k].tolist()), set(pred)
                             rec += len(gt_set.intersection(pred_set)) / k
-                        m_t_sq[k], m_r_sq[k] = (acc / len(queries_t)) * 100, (rec / len(queries_t)) * 100
+                            ndcg_sum += compute_ndcg(pred, ground_truth[i].tolist(), k)
+                        n_q = len(queries_t)
+                        m_t_sq[k] = (acc / n_q) * 100
+                        m_r_sq[k] = (rec / n_q) * 100
+                        m_ndcg_sq[k] = (ndcg_sum / n_q) * 100
 
                     priv_sq, _ = get_ram_info()
                     ram_sq = priv_sq - priv_before
-                    
                     _, rss_after_sq = get_ram_info()
-                        
+
                     results.append({
-                        "label": f"FAISS-SQ {bits}b", 
-                        "top1": m_t_sq, "recall": m_r_sq, "qps": qps_sq, 
-                        "priv_mb": ram_sq, "rss_mb": rss_after_sq
+                        "label": f"FAISS-SQ {bits}b",
+                        "top1": m_t_sq, "recall": m_r_sq, "ndcg": m_ndcg_sq,
+                        "mse": sq_mse,
+                        "qps": qps_sq,
+                        "priv_mb": ram_sq, "rss_mb": rss_after_sq,
                     })
                     del sq_faiss_index; gc.collect()
-                    empty_working_set() # Dọn dẹp Cache
+                    empty_working_set()  # Dọn dẹp Cache
                 except Exception as e:
                     print(f"Error evaluating FAISS SQ: {e}")
             else:
@@ -1024,37 +1161,46 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
                 gc.collect()
                 priv_before, rss_before = get_ram_info()
                 pq_index = faiss.read_index(pq_cache_path)
-                
+
                 priv_now, _ = get_ram_info()
                 ram_pq = max(0.0, priv_now - priv_before)
-                
+
+                # MSE cho FAISS PQ
+                pq_mse = compute_mse_faiss(pq_index, corpus_mm)
+                print(f"  FAISS-PQ {bits}b Quantization MSE = {pq_mse:.6f}")
+
                 pq_index.nprobe = 64
                 start_pq = time.time()
                 D, I = pq_index.search(queries_t.cpu().numpy(), max(k_values))
                 qps_pq = len(queries_t) / (time.time() - start_pq)
                 
-                m_t_pq, m_r_pq = {}, {}
+                m_t_pq, m_r_pq, m_ndcg_pq = {}, {}, {}
                 for k in k_values:
-                    acc, rec = 0, 0
+                    acc, rec, ndcg_sum = 0, 0, 0.0
                     for i in range(len(queries_t)):
-                        pred = I[i, :k]
+                        pred = I[i, :k].tolist()
                         if ground_truth[i, 0] in pred: acc += 1
-                        gt_set, pred_set = set(ground_truth[i, :k]), set(pred)
+                        gt_set, pred_set = set(ground_truth[i, :k].tolist()), set(pred)
                         rec += len(gt_set.intersection(pred_set)) / k
-                    m_t_pq[k], m_r_pq[k] = (acc / len(queries_t)) * 100, (rec / len(queries_t)) * 100
+                        ndcg_sum += compute_ndcg(pred, ground_truth[i].tolist(), k)
+                    n_q = len(queries_t)
+                    m_t_pq[k] = (acc / n_q) * 100
+                    m_r_pq[k] = (rec / n_q) * 100
+                    m_ndcg_pq[k] = (ndcg_sum / n_q) * 100
 
                 priv_pq, _ = get_ram_info()
                 ram_pq = priv_pq - priv_before
-                
                 _, rss_after_pq = get_ram_info()
-                    
+
                 results.append({
-                    "label": f"FAISS-PQ {bits}b", 
-                    "top1": m_t_pq, "recall": m_r_pq, "qps": qps_pq, 
-                    "priv_mb": ram_pq, "rss_mb": rss_after_pq
+                    "label": f"FAISS-PQ {bits}b",
+                    "top1": m_t_pq, "recall": m_r_pq, "ndcg": m_ndcg_pq,
+                    "mse": pq_mse,
+                    "qps": qps_pq,
+                    "priv_mb": ram_pq, "rss_mb": rss_after_pq,
                 })
                 del pq_index; gc.collect()
-                empty_working_set() # Dọn dẹp Cache
+                empty_working_set()  # Dọn dẹp Cache
             except Exception as e:
                 print(f"Error evaluating FAISS PQ: {e}")
         else:
@@ -1080,19 +1226,36 @@ def run(args: argparse.Namespace) -> List[Dict[str, Any]]:
         cols = " | ".join([f"{res['recall'][k]:5.1f}%" for k in k_values])
         print(f"{res['label']:<28} | {cols} | {res['qps']:>8.1f} | {res.get('priv_mb', 0):>11.1f} | {res.get('rss_mb', 0):>11.1f}")
 
+    hdr3 = " | ".join([f"N@K={k:<2}" for k in k_values])
+    print("\n" + "=" * 125)
+    print("NDCG@K (%) - Normalized Discounted Cumulative Gain")
+    print("=" * 125)
+    print(f"{'Method':<28} | {hdr3} | {'MSE':>10}")
+    print("-" * 140)
+    for res in results:
+        ndcg_d = res.get('ndcg', {})
+        cols = " | ".join([f"{ndcg_d.get(k, 0.0):5.2f}%" for k in k_values])
+        mse_v = res.get('mse', float('nan'))
+        mse_s = f"{mse_v:.6f}" if not (mse_v != mse_v) else "  N/A  "
+        print(f"{res['label']:<28} | {cols} | {mse_s:>10}")
+
     out_dir = os.path.join(project_root, "benchmark_result")
     os.makedirs(out_dir, exist_ok=True)
     out_json = os.path.join(out_dir, "benchmark_results.json")
     serializable = []
     for r in results:
+        ndcg_d = r.get('ndcg', {})
+        mse_v = r.get('mse', None)
         serializable.append(
             {
                 "label": r["label"],
                 "qps": r["qps"],
                 "top1": {str(k): float(v) for k, v in r["top1"].items()},
                 "recall": {str(k): float(v) for k, v in r["recall"].items()},
-                "ram_mb": r.get("ram_mb", 0.0),
-                "ram_cache_mb": r.get("ram_cache_mb", 0.0),
+                "ndcg": {str(k): float(v) for k, v in ndcg_d.items()},
+                "mse": float(mse_v) if mse_v is not None and mse_v == mse_v else None,
+                "priv_mb": r.get("priv_mb", 0.0),
+                "rss_mb": r.get("rss_mb", 0.0),
             }
         )
     with open(out_json, "w", encoding="utf-8") as f:
