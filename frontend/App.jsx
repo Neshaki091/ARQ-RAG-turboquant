@@ -3,7 +3,7 @@ import { Send, Upload, FileText, Cpu, Search, Trash2, Book, Loader2, Sparkles, M
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = "https://neshaki-arq-rag-turboquant.hf.space/";
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("token") || "");

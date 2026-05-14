@@ -18,6 +18,22 @@ TQ_engine_lib/core/target
 data/
 data_recall@k/
 
+# Python & Binaries
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.whl
+*.dll
+build/
+build_log.txt
+
+# Rust
+target/
+**/target/
+#hugging face
+ARQ-RAG-Turboquant/
 # Frontend/
 test_backend/
 frontend/.next/
