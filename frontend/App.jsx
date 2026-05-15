@@ -378,7 +378,7 @@ export default function App() {
           buffer += chunk;
           if (buffer.includes("--META_END--")) {
             const parts = buffer.split("--META_END--");
-            const metaStr = parts[0];
+            const metaStr = parts[0].trim(); // Thêm trim() để loại bỏ khoảng trắng mồi
             try {
               const meta = JSON.parse(metaStr);
               setMessages(prev => prev.map(m =>
