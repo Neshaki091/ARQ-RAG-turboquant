@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Send, Upload, FileText, Cpu, Search, Trash2, Book, Loader2, Sparkles, MessageSquare, Zap, Activity, Shield, LogOut, User, Lock, Layers, Play, Menu, X } from 'lucide-react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
@@ -22,7 +22,7 @@ export default function App() {
   const [simQueries, setSimQueries] = useState([]);
   const [simResults, setSimResults] = useState({});
   const [isSimulating, setIsSimulating] = useState(false);
-  const [simCount, setSimCount] = useState(32); // Mặc định 32, tối đa 50
+  const [simCount, setSimCount] = useState(32); // Máº·c Ä‘á»‹nh 32, tá»‘i Ä‘a 50
   
   // New States for Sessions
   const [sessions, setSessions] = useState([]);
@@ -168,15 +168,15 @@ export default function App() {
       });
       const all = Array.isArray(res.data) ? res.data : [];
       if (all.length === 0) {
-        alert("Bộ câu hỏi rỗng!");
+        alert("Bá»™ cĂ¢u há»i rá»—ng!");
         return;
       }
-      // Lấy ngẫu nhiên theo số lượng simCount
+      // Láº¥y ngáº«u nhiĂªn theo sá»‘ lÆ°á»£ng simCount
       const shuffled = [...all].sort(() => 0.5 - Math.random());
       const selected = shuffled.slice(0, Math.min(simCount, 50)).map((q, idx) => {
         let qText = "";
         if (typeof q === 'string') qText = q;
-        else qText = q.question || q.text || q.query || "Câu hỏi không xác định";
+        else qText = q.question || q.text || q.query || "CĂ¢u há»i khĂ´ng xĂ¡c Ä‘á»‹nh";
         
         return {
           id: idx,
@@ -195,7 +195,7 @@ export default function App() {
       setSimResults({});
     } catch (err) {
       console.error(err);
-      alert("Lỗi tải bộ câu hỏi benchmark!");
+      alert("Lá»—i táº£i bá»™ cĂ¢u há»i benchmark!");
     }
   };
 
@@ -209,10 +209,10 @@ export default function App() {
     let totalEmbed = 0;
     let totalSearch = 0;
 
-    // Cập nhật trạng thái tất cả sang pending
+    // Cáº­p nháº­t tráº¡ng thĂ¡i táº¥t cáº£ sang pending
     setSimQueries(prev => prev.map(q => ({ ...q, status: 'pending', answer: null })));
 
-    // Gửi MỘT request duy nhất chứa toàn bộ batch để kích hoạt cơ chế Batch Processing (không gọi LLM)
+    // Gá»­i Má»˜T request duy nháº¥t chá»©a toĂ n bá»™ batch Ä‘á»ƒ kĂ­ch hoáº¡t cÆ¡ cháº¿ Batch Processing (khĂ´ng gá»i LLM)
     try {
       const res = await axios.post(`${API_BASE}/chat`, {
         messages_batch: simQueries.map(q => q.question),
@@ -226,7 +226,7 @@ export default function App() {
 
       const batchResults = res.data.batch_results || [];
       
-      // Cập nhật kết quả cho toàn bộ các câu hỏi cùng lúc
+      // Cáº­p nháº­t káº¿t quáº£ cho toĂ n bá»™ cĂ¡c cĂ¢u há»i cĂ¹ng lĂºc
       setSimQueries(prev => prev.map((q, idx) => {
         const bRes = batchResults[idx] || {};
         return {
@@ -237,7 +237,7 @@ export default function App() {
           complexity: bRes.complexity || "Average",
           embed_latency: bRes.embed_latency || 0,
           search_latency: bRes.search_latency || 0,
-          latency: (Date.now() - startTime) / simQueries.length // Độ trễ trung bình cho mỗi câu
+          latency: (Date.now() - startTime) / simQueries.length // Äá»™ trá»… trung bĂ¬nh cho má»—i cĂ¢u
         };
       }));
 
@@ -263,7 +263,7 @@ export default function App() {
 
   const handleCreateSession = async () => {
     const newId = `session_${Date.now()}`;
-    const title = prompt("Nhập tiêu đề cuộc trò chuyện mới:", "New Chat") || "New Chat";
+    const title = prompt("Nháº­p tiĂªu Ä‘á» cuá»™c trĂ² chuyá»‡n má»›i:", "New Chat") || "New Chat";
     try {
       await axios.post(`${API_BASE}/sessions`, 
         { session_id: newId, title: title },
@@ -272,13 +272,13 @@ export default function App() {
       fetchSessions();
       setActiveSessionId(newId);
     } catch (err) {
-      alert("Lỗi khi tạo phiên mới!");
+      alert("Lá»—i khi táº¡o phiĂªn má»›i!");
     }
   };
 
   const handleDeleteSession = async (e, sid) => {
     e.stopPropagation();
-    if (!confirm("Xóa cuộc trò chuyện này?")) return;
+    if (!confirm("XĂ³a cuá»™c trĂ² chuyá»‡n nĂ y?")) return;
     try {
       await axios.delete(`${API_BASE}/sessions/${sid}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -286,7 +286,7 @@ export default function App() {
       fetchSessions();
       if (activeSessionId === sid) setActiveSessionId("default");
     } catch (err) {
-      alert("Lỗi khi xóa phiên!");
+      alert("Lá»—i khi xĂ³a phiĂªn!");
     }
   };
 
@@ -296,7 +296,7 @@ export default function App() {
     try {
       if (isRegistering) {
         await axios.post(`${API_BASE}/register`, authForm);
-        alert("Đăng ký thành công! Hãy đăng nhập.");
+        alert("ÄÄƒng kĂ½ thĂ nh cĂ´ng! HĂ£y Ä‘Äƒng nháº­p.");
         setIsRegistering(false);
       } else {
         const res = await axios.post(`${API_BASE}/login`, authForm);
@@ -305,7 +305,7 @@ export default function App() {
         localStorage.setItem("token", newToken);
       }
     } catch (err) {
-      alert(err.response?.data?.detail || "Lỗi xác thực!");
+      alert(err.response?.data?.detail || "Lá»—i xĂ¡c thá»±c!");
     } finally {
       setLoading(false);
     }
@@ -356,7 +356,7 @@ export default function App() {
       let isMetaEnd = false;
       let fullContent = "";
       let ttftRecorded = false;
-      let buffer = ""; // Bộ đệm để tích lũy dữ liệu meta
+      let buffer = ""; // Bá»™ Ä‘á»‡m Ä‘á»ƒ tĂ­ch lÅ©y dá»¯ liá»‡u meta
 
       while (true) {
         const { done, value } = await reader.read();
@@ -368,7 +368,7 @@ export default function App() {
           buffer += chunk;
           if (buffer.includes("--META_END--")) {
             const parts = buffer.split("--META_END--");
-            const metaStr = parts[0].trim(); // Thêm trim() để loại bỏ khoảng trắng mồi
+            const metaStr = parts[0].trim(); // ThĂªm trim() Ä‘á»ƒ loáº¡i bá» khoáº£ng tráº¯ng má»“i
             try {
               const meta = JSON.parse(metaStr);
               setMessages(prev => prev.map(m =>
@@ -413,7 +413,7 @@ export default function App() {
     } catch (err) {
       console.error(err);
       setMessages(prev => prev.map(m =>
-        m.id === botMsgId ? { ...m, content: "Có lỗi xảy ra!", loading: false } : m
+        m.id === botMsgId ? { ...m, content: "CĂ³ lá»—i xáº£y ra!", loading: false } : m
       ));
     } finally {
       setLoading(false);
@@ -437,7 +437,7 @@ export default function App() {
       });
       fetchDocuments(activeSessionId);
     } catch (err) {
-      alert("Lỗi khi tải lên!");
+      alert("Lá»—i khi táº£i lĂªn!");
     } finally {
       setUploading(false);
       e.target.value = null;
@@ -452,19 +452,19 @@ export default function App() {
       });
       setSelectedDocChunks(res.data.chunks || []);
     } catch (err) {
-      alert("Lỗi khi tải nội dung tài liệu!");
+      alert("Lá»—i khi táº£i ná»™i dung tĂ i liá»‡u!");
     }
   };
 
   const handleDelete = async (filename) => {
-    if (!confirm(`Bạn có chắc chắn muốn xóa tài liệu "${filename}"?`)) return;
+    if (!confirm(`Báº¡n cĂ³ cháº¯c cháº¯n muá»‘n xĂ³a tĂ i liá»‡u "${filename}"?`)) return;
     try {
       await axios.delete(`${API_BASE}/documents/${filename}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       fetchDocuments(activeSessionId);
     } catch (err) {
-      alert("Lỗi khi xóa tài liệu!");
+      alert("Lá»—i khi xĂ³a tĂ i liá»‡u!");
     }
   };
 
@@ -485,7 +485,7 @@ export default function App() {
               <User size={18} />
               <input 
                 type="text" 
-                placeholder="Tên đăng nhập" 
+                placeholder="TĂªn Ä‘Äƒng nháº­p" 
                 required 
                 value={authForm.username}
                 onChange={e => setAuthForm({...authForm, username: e.target.value})}
@@ -495,21 +495,21 @@ export default function App() {
               <Lock size={18} />
               <input 
                 type="password" 
-                placeholder="Mật khẩu" 
+                placeholder="Máº­t kháº©u" 
                 required 
                 value={authForm.password}
                 onChange={e => setAuthForm({...authForm, password: e.target.value})}
               />
             </div>
             <button className="auth-submit" type="submit" disabled={loading}>
-              {loading ? <Loader2 className="spin" /> : (isRegistering ? "Đăng ký" : "Đăng nhập")}
+              {loading ? <Loader2 className="spin" /> : (isRegistering ? "ÄÄƒng kĂ½" : "ÄÄƒng nháº­p")}
             </button>
           </form>
           
           <div className="auth-toggle">
-            {isRegistering ? "Đã có tài khoản?" : "Chưa có tài khoản?"}
+            {isRegistering ? "ÄĂ£ cĂ³ tĂ i khoáº£n?" : "Chưa có tài khoản?"}
             <button onClick={() => setIsRegistering(!isRegistering)}>
-              {isRegistering ? "Đăng nhập ngay" : "Đăng ký ngay"}
+              {isRegistering ? "ÄÄƒng nháº­p ngay" : "ÄÄƒng kĂ½ ngay"}
             </button>
           </div>
         </div>
@@ -528,7 +528,7 @@ export default function App() {
             <h1>ARQ-RAG</h1>
             <span>{user?.username}</span>
           </div>
-          <button className="logout-btn" onClick={handleLogout} title="Đăng xuất">
+          <button className="logout-btn" onClick={handleLogout} title="ÄÄƒng xuáº¥t">
             <LogOut size={16} />
           </button>
           <button className="mobile-close-btn" onClick={() => setIsSidebarOpen(false)}>
@@ -539,7 +539,7 @@ export default function App() {
         <div className="mode-selector">
           <div className="section-header">
             <Zap size={14} />
-            <h3>CHẾ ĐỘ TRUY VẤN</h3>
+            <h3>CHáº¾ Äá»˜ TRUY Váº¤N</h3>
           </div>
           <div className="mode-grid">
             {['ultrafast', 'fast', 'balance', 'accuracy', 'adaptive'].map(m => (
@@ -557,7 +557,7 @@ export default function App() {
         <div className="scope-selector">
           <div className="section-header">
             <Layers size={14} />
-            <h3>PHẠM VI BỘ NHỚ</h3>
+            <h3>PHáº M VI Bá»˜ NHá»</h3>
           </div>
           <div className="scope-tabs">
             <div className={`scope-tab ${scope === 'user' ? 'active' : ''}`} onClick={() => setScope('user')}>
@@ -578,7 +578,7 @@ export default function App() {
               {uploading ? <Loader2 className="spin" /> : <Upload />}
             </div>
             <div className="upload-info">
-              <span className="upload-title">Tải tài liệu mới</span>
+              <span className="upload-title">Táº£i tĂ i liá»‡u má»›i</span>
               <span className="upload-subtitle">Session: {activeSessionId}</span>
             </div>
             <input type="file" hidden onChange={handleUpload} accept=".pdf" disabled={uploading} />
@@ -588,15 +588,15 @@ export default function App() {
         <div className="session-section">
           <div className="section-header">
             <MessageSquare size={16} />
-            <h3>HỘI THOẠI</h3>
-            <button className="new-chat-btn" onClick={handleCreateSession} title="Tạo phiên mới">+</button>
+            <h3>Há»˜I THOáº I</h3>
+            <button className="new-chat-btn" onClick={handleCreateSession} title="Táº¡o phiĂªn má»›i">+</button>
           </div>
           <div className="session-list">
             <div 
               className={`session-item ${activeSessionId === 'default' ? 'active' : ''}`}
               onClick={() => setActiveSessionId('default')}
             >
-              <div className="session-name">Mặc định (General)</div>
+              <div className="session-name">Máº·c Ä‘á»‹nh (General)</div>
             </div>
             {sessions.map(s => (
               <div 
@@ -614,22 +614,22 @@ export default function App() {
         <div className="doc-section">
           <div className="section-header">
             <Book size={16} />
-            <h3>TÀI LIỆU CỦA BẠN</h3>
+            <h3>TĂ€I LIá»†U Cá»¦A Báº N</h3>
             <span className="count">{documents.length}</span>
           </div>
           <div className="doc-list">
             {documents.length === 0 ? (
-              <div className="empty-docs">Chưa có tài liệu nào</div>
+              <div className="empty-docs">ChÆ°a cĂ³ tĂ i liá»‡u nĂ o</div>
             ) : (
               documents.map((doc, idx) => (
                 <div key={idx} className="doc-item">
                   <div className="doc-icon"><FileText size={14} /></div>
                   <div className="doc-name" title={doc}>{doc}</div>
                   <div className="doc-actions">
-                    <button className="view-btn" onClick={() => handleViewDoc(doc)} title="Xem chi tiết">
+                    <button className="view-btn" onClick={() => handleViewDoc(doc)} title="Xem chi tiáº¿t">
                       <Search size={14} />
                     </button>
-                    <button className="delete-btn" onClick={() => handleDelete(doc)} title="Xóa">
+                    <button className="delete-btn" onClick={() => handleDelete(doc)} title="XĂ³a">
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -641,6 +641,7 @@ export default function App() {
       </div>
 
       <div className="main-content">
+        <header className="main-header">
           <div className="header-info">
             <button className="mobile-toggle-btn" onClick={() => setIsSidebarOpen(true)}>
               <Menu size={20} />
@@ -679,8 +680,8 @@ export default function App() {
                   {messages.length === 0 && (
                     <div className="welcome-screen">
                       <div className="welcome-art"><Cpu size={64} className="art-icon" /></div>
-                      <h3>Chào mừng, {user?.username} {user?.role === 'admin' && <span className="admin-badge">Admin</span>}</h3>
-                      <p>Hệ thống ARQ-RAG đang sẵn sàng với bộ nhớ {scope}.</p>
+                      <h3>ChĂ o má»«ng, {user?.username} {user?.role === 'admin' && <span className="admin-badge">Admin</span>}</h3>
+                      <p>Há»‡ thá»‘ng ARQ-RAG Ä‘ang sáºµn sĂ ng vá»›i bá»™ nhá»› {scope}.</p>
                     </div>
                   )}
                   {messages.map((m, i) => (
@@ -688,9 +689,9 @@ export default function App() {
                       <div className="message-avatar">{m.role === 'user' ? 'U' : 'AI'}</div>
                       <div className="message-content">
                         <div className="metrics-row">
-                          {m.complexity && <div className={`complexity-tag ${m.complexity.toLowerCase()}`}>🧠 {m.complexity}</div>}
-                          {m.latency && <div className="latency-tag">🔍 {m.latency}</div>}
-                          {m.ttft && <div className="ttft-tag">🚀 {m.ttft}</div>}
+                          {m.complexity && <div className={`complexity-tag ${m.complexity.toLowerCase()}`}>đŸ§  {m.complexity}</div>}
+                          {m.latency && <div className="latency-tag">đŸ” {m.latency}</div>}
+                          {m.ttft && <div className="ttft-tag">đŸ€ {m.ttft}</div>}
                         </div>
                         <div className="text-body"><ReactMarkdown>{m.content}</ReactMarkdown></div>
                         {m.sources && (
@@ -710,7 +711,7 @@ export default function App() {
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                      placeholder="Hỏi bất cứ điều gì..."
+                      placeholder="Há»i báº¥t cá»© Ä‘iá»u gĂ¬..."
                       disabled={loading}
                     />
                     <button className="send-btn" onClick={handleSend} disabled={!input || loading}>
@@ -729,7 +730,7 @@ export default function App() {
                    </div>
                    <div className="sim-header-actions">
                       <div className="sim-count-input">
-                        <span>Số câu:</span>
+                        <span>Sá»‘ cĂ¢u:</span>
                         <input 
                           type="number" 
                           min="1" 
@@ -783,7 +784,7 @@ export default function App() {
                   {simQueries.length === 0 ? (
                     <div className="sim-empty">
                        <Activity size={48} className="text-dim" />
-                       <p>Nhấn "Load 32 Queries" để bắt đầu mô phỏng kịch bản tải thực tế.</p>
+                       <p>Nháº¥n "Load 32 Queries" Ä‘á»ƒ báº¯t Ä‘áº§u mĂ´ phá»ng ká»‹ch báº£n táº£i thá»±c táº¿.</p>
                     </div>
                   ) : (
                     simQueries.map((q) => (
@@ -810,13 +811,13 @@ export default function App() {
                                 ))}
                              </div>
                               <div className="sim-result-footer">
-                                <div className="sim-latency-box wait" title="Tổng thời gian chờ (User Experience)">
+                                <div className="sim-latency-box wait" title="Tá»•ng thá»i gian chá» (User Experience)">
                                    <Zap size={12} /> {q.latency}ms
                                 </div>
-                                <div className="sim-latency-box embed" title="Thời gian tạo Vector">
+                                <div className="sim-latency-box embed" title="Thá»i gian táº¡o Vector">
                                    <Cpu size={12} /> {q.embed_latency}ms
                                 </div>
-                                <div className="sim-latency-box search" title="Thời gian TurboQuant Search">
+                                <div className="sim-latency-box search" title="Thá»i gian TurboQuant Search">
                                    <Search size={12} /> {q.search_latency}ms
                                 </div>
                                 <div className="sim-count-box">
@@ -834,11 +835,11 @@ export default function App() {
               <div className="admin-container">
                 <div className="admin-header">
                   <div className="admin-nav">
-                    <button className={`admin-nav-btn ${adminSubTab === 'users' ? 'active' : ''}`} onClick={() => setAdminSubTab('users')}>Người dùng</button>
-                    <button className={`admin-nav-btn ${adminSubTab === 'system' ? 'active' : ''}`} onClick={() => setAdminSubTab('system')}>Bộ nhớ Hệ thống (5M)</button>
+                    <button className={`admin-nav-btn ${adminSubTab === 'users' ? 'active' : ''}`} onClick={() => setAdminSubTab('users')}>NgÆ°á»i dĂ¹ng</button>
+                    <button className={`admin-nav-btn ${adminSubTab === 'system' ? 'active' : ''}`} onClick={() => setAdminSubTab('system')}>Bá»™ nhá»› Há»‡ thá»‘ng (5M)</button>
                   </div>
                   <button className="refresh-btn" onClick={() => adminSubTab === 'users' ? fetchAdminUsers() : fetchSystemChunks(systemOffset)}>
-                    <Activity size={16} /> Làm mới
+                    <Activity size={16} /> LĂ m má»›i
                   </button>
                 </div>
 
@@ -850,7 +851,7 @@ export default function App() {
                           <th>ID</th>
                           <th>Username</th>
                           <th>Role</th>
-                          <th>Ngày tạo</th>
+                          <th>NgĂ y táº¡o</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -868,10 +869,10 @@ export default function App() {
                 ) : (
                   <div className="system-browser">
                     <div className="pagination-info">
-                      <span>Hiển thị {systemOffset + 1} - {systemOffset + systemChunks.length} trong tổng số {systemTotal.toLocaleString()} vectors</span>
+                      <span>Hiá»ƒn thá»‹ {systemOffset + 1} - {systemOffset + systemChunks.length} trong tá»•ng sá»‘ {systemTotal.toLocaleString()} vectors</span>
                       <div className="pagination-actions">
-                        <button disabled={systemOffset === 0} onClick={() => fetchSystemChunks(Math.max(0, systemOffset - 100))}>Trước</button>
-                        <button disabled={systemOffset + 100 >= systemTotal} onClick={() => fetchSystemChunks(systemOffset + 100)}>Tiếp</button>
+                        <button disabled={systemOffset === 0} onClick={() => fetchSystemChunks(Math.max(0, systemOffset - 100))}>TrÆ°á»›c</button>
+                        <button disabled={systemOffset + 100 >= systemTotal} onClick={() => fetchSystemChunks(systemOffset + 100)}>Tiáº¿p</button>
                       </div>
                     </div>
                     <div className="system-table-wrapper scrollable">
@@ -879,8 +880,8 @@ export default function App() {
                         <thead>
                           <tr>
                             <th>ID</th>
-                            <th style={{ width: '60%' }}>Nội dung (Preview)</th>
-                            <th>Nguồn</th>
+                            <th style={{ width: '60%' }}>Ná»™i dung (Preview)</th>
+                            <th>Nguá»“n</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -940,7 +941,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* Modal xem chi tiết tài liệu */}
+      {/* Modal Documents Details */}
       {selectedDocChunks && (
         <div className="modal-overlay" onClick={() => setSelectedDocChunks(null)}>
           <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -952,7 +953,7 @@ export default function App() {
               <div className="chunks-list">
                 {selectedDocChunks.map((c, ci) => (
                   <div key={ci} className="chunk-card">
-                    <div className="chunk-meta">Đoạn {ci + 1} - Trang {c.page || '?' } (ID: {c.id})</div>
+                    <div className="chunk-meta">Äoáº¡n {ci + 1} - Trang {c.page || '?' } (ID: {c.id})</div>
                     <div className="chunk-text">{c.text}</div>
                   </div>
                 ))}
@@ -967,3 +968,4 @@ export default function App() {
     </div>
   );
 }
+
