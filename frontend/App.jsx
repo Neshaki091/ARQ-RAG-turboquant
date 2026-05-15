@@ -344,7 +344,8 @@ export default function App() {
           message: input, 
           mode: mode, 
           scope: scope,
-          session_id: activeSessionId 
+          session_id: activeSessionId,
+          stream: true
         })
       });
 
