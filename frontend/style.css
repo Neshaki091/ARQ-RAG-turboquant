@@ -2485,14 +2485,6 @@ body {
   .main-header {
     padding: 10px 15px;
     gap: 10px;
-    height: auto;
-    min-height: 60px;
-  }
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
   }
   
   .tabs-nav {
@@ -2502,23 +2494,6 @@ body {
   .tab-link {
     padding: 6px 10px;
     font-size: 0.8rem;
-  }
-  
-  .sim-header-row {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-
-  .sim-header-actions {
-    width: 100%;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .sim-count-input {
-    justify-content: space-between;
   }
   
   .sim-metrics-grid {
@@ -2536,12 +2511,111 @@ body {
   .input-wrapper {
     margin: 0 10px;
   }
+}
 
-  .welcome-screen h3 {
-    font-size: 1.2rem;
+/* --- MOBILE RESPONSIVE --- */
+.mobile-toggle, .mobile-close {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 8px;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-toggle:hover, .mobile-close:hover {
+  color: var(--primary);
+  background: rgba(255,255,255,0.05);
+  border-radius: 8px;
+}
+
+@media (max-width: 1024px) {
+  .resource-sidebar {
+    position: fixed;
+    right: -320px;
+    top: 0;
+    bottom: 0;
+    width: 300px;
+    z-index: 1000;
+    background: var(--bg-card);
+    box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  .welcome-screen p {
-    font-size: 0.9rem;
+  .resource-sidebar.open {
+    right: 0;
+  }
+}
+
+@media (max-width: 768px) {
+  .mobile-toggle {
+    display: flex;
+  }
+
+  .sidebar {
+    position: fixed;
+    left: -280px;
+    top: 0;
+    bottom: 0;
+    width: 280px;
+    z-index: 2000;
+    background: var(--bg-card);
+    box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .sidebar.open {
+    left: 0;
+  }
+
+  .mobile-close {
+    display: flex;
+    margin-left: auto;
+  }
+
+  .hide-mobile {
+    display: none !important;
+  }
+
+  .main-header {
+    padding: 0 1rem;
+    height: 60px;
+  }
+
+  .dashboard {
+    grid-template-columns: 1fr !important;
+  }
+
+  .center-view {
+    padding: 10px;
+    width: 100%;
+  }
+
+  .sim-metrics-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .input-wrapper {
+    padding: 0.5rem;
+  }
+  
+  .message-wrapper {
+    max-width: 95%;
+  }
+
+  .brand h2 {
+    font-size: 1.1rem;
+  }
+
+  .tabs-nav {
+    gap: 10px;
+  }
+
+  .tab-link {
+    padding: 5px 10px;
+    font-size: 0.8rem;
   }
 }
