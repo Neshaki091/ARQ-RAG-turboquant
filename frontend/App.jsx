@@ -3,7 +3,7 @@ import { Send, Upload, FileText, Cpu, Search, Trash2, Book, Loader2, Sparkles, M
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 
-const API_BASE = "https://neshaki-arq-rag-turboquant.hf.space";
+const API_BASE = import.meta.env.VITE_API_BASE || "https://neshaki-arq-rag-turboquant.hf.space";
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem("token") || "");
@@ -366,6 +366,7 @@ export default function App() {
       let isMetaEnd = false;
       let fullContent = "";
       let ttftRecorded = false;
+      let buffer = ""; // Bộ đệm để tích lũy dữ liệu meta
 
       while (true) {
         const { done, value } = await reader.read();
@@ -374,8 +375,9 @@ export default function App() {
         const chunk = decoder.decode(value, { stream: true });
 
         if (!isMetaEnd) {
-          if (chunk.includes("--META_END--")) {
-            const parts = chunk.split("--META_END--");
+          buffer += chunk;
+          if (buffer.includes("--META_END--")) {
+            const parts = buffer.split("--META_END--");
             const metaStr = parts[0];
             try {
               const meta = JSON.parse(metaStr);
