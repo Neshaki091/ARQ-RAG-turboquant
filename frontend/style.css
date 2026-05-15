@@ -844,7 +844,7 @@ body {
   box-shadow: 0 0 10px #10b981;
 }
 
-/* Nút Import & Cleanup */
+/* NĂºt Import & Cleanup */
 .import-btn {
   width: 100%;
   padding: 12px;
@@ -1126,7 +1126,7 @@ body {
 }
 
 .answer-text {
-  color: #10b981; /* Xanh lá cho câu trả lời AI */
+  color: #10b981; /* Xanh lĂ¡ cho cĂ¢u tráº£ lá»i AI */
   line-height: 1.4;
 }
 
@@ -1929,7 +1929,7 @@ body {
   height: 100vh;
   width: 100%;
   overflow: hidden;
-  background: var(--bg-dark); /* Đã sửa thành --bg-dark */
+  background: var(--bg-dark); /* ÄĂ£ sá»­a thĂ nh --bg-dark */
   margin: 0;
   justify-content: flex-start;
 }
@@ -2189,17 +2189,17 @@ body {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden; /* Không cuộn cả trang */
+  overflow: hidden; /* KhĂ´ng cuá»™n cáº£ trang */
 }
 
 .sim-grid {
-  flex: 1; /* Chiếm hết phần còn lại */
+  flex: 1; /* Chiáº¿m háº¿t pháº§n cĂ²n láº¡i */
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 16px;
   width: 100%;
   padding: 20px 0;
-  overflow-y: auto; /* Chỉ cuộn phần này */
+  overflow-y: auto; /* Chá»‰ cuá»™n pháº§n nĂ y */
   padding-right: 8px;
 }
 
@@ -2377,14 +2377,14 @@ body {
 .chat-container {
   display: flex !important;
   flex-direction: column !important;
-  height: calc(100vh - 120px) !important; /* Chi?u cao c? �?nh tr? �i header */
+  height: calc(100vh - 120px) !important; /* Chi?u cao c? đ?nh tr? đi header */
   position: relative !important;
 }
 
 .messages-area {
   flex: 1 !important;
   overflow-y: auto !important;
-  padding-bottom: 100px !important; /* Ch?a ch? cho � nh?p li?u */
+  padding-bottom: 100px !important; /* Ch?a ch? cho ô nh?p li?u */
   scroll-behavior: smooth;
 }
 
@@ -2393,7 +2393,7 @@ body {
   bottom: 0 !important;
   left: 0 !important;
   right: 0 !important;
-  background: var(--bg-dark); /* �?m b?o che ��?c tin nh?n b�n d�?i */
+  background: var(--bg-dark); /* Đ?m b?o che đư?c tin nh?n bên dư?i */
   padding: 20px 0 !important;
   z-index: 10;
 }
@@ -2407,3 +2407,141 @@ body {
 .text-body code { background: rgba(0,0,0,0.3); padding: 2px 6px; border-radius: 4px; font-family: 'Fira Code', monospace; font-size: 0.9em; color: var(--secondary); }
 .text-body pre { background: #0d1117; padding: 1.2rem; border-radius: 12px; overflow-x: auto; border: 1px solid var(--border); margin-bottom: 1.5rem; }
 .text-body blockquote { border-left: 4px solid var(--primary); padding-left: 1rem; color: var(--text-dim); font-style: italic; margin-bottom: 1rem; }
+
+/* Responsive Support */
+.mobile-toggle-btn {
+  display: none;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+}
+
+.mobile-close-btn {
+  display: none;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 4px;
+  margin-left: auto;
+}
+
+.mobile-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 99;
+}
+
+@media (max-width: 1024px) {
+  .hide-mobile { display: none !important; }
+  
+  .mobile-toggle-btn { display: flex; }
+  
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 100;
+    transform: translateX(-100%);
+    transition: transform 0.3s ease;
+    box-shadow: 20px 0 50px rgba(0,0,0,0.5);
+  }
+  
+  .sidebar.mobile-open {
+    transform: translateX(0);
+  }
+  
+  .resource-sidebar {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 100;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    box-shadow: -20px 0 50px rgba(0,0,0,0.5);
+    background: var(--sidebar-bg);
+  }
+  
+  .resource-sidebar.mobile-open {
+    transform: translateX(0);
+  }
+  
+  .mobile-close-btn {
+    display: block;
+  }
+  
+  .main-header {
+    padding: 10px 15px;
+    gap: 10px;
+    height: auto;
+    min-height: 60px;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .tabs-nav {
+    gap: 5px;
+  }
+  
+  .tab-link {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+  
+  .sim-header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+
+  .sim-header-actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .sim-count-input {
+    justify-content: space-between;
+  }
+  
+  .sim-metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .sim-grid {
+    grid-template-columns: repeat(1, 1fr);
+  }
+  
+  .chat-container {
+    height: calc(100vh - 80px) !important;
+  }
+  
+  .input-wrapper {
+    margin: 0 10px;
+  }
+
+  .welcome-screen h3 {
+    font-size: 1.2rem;
+  }
+
+  .welcome-screen p {
+    font-size: 0.9rem;
+  }
+}

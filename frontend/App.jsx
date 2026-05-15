@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Send, Upload, FileText, Cpu, Search, Trash2, Book, Loader2, Sparkles, MessageSquare, Zap, Activity, Shield, LogOut, User, Lock, Layers, Play } from 'lucide-react';
+import { Send, Upload, FileText, Cpu, Search, Trash2, Book, Loader2, Sparkles, MessageSquare, Zap, Activity, Shield, LogOut, User, Lock, Layers, Play, Menu, X } from 'lucide-react';
 import axios from 'axios';
 import ReactMarkdown from 'react-markdown';
 
@@ -39,6 +39,8 @@ export default function App() {
   const [adminSubTab, setAdminSubTab] = useState('users'); // 'users', 'system'
   
   const [telemetry, setTelemetry] = useState({ cpu: 0, ram: 0, uptime: 0 });
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isResourceOpen, setIsResourceOpen] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -517,7 +519,7 @@ export default function App() {
 
   return (
     <div className="dashboard">
-      <div className="sidebar">
+      <div className={`sidebar ${isSidebarOpen ? 'mobile-open' : ''}`}>
         <div className="brand">
           <div className="logo-container">
             <Cpu className="logo-icon" />
@@ -528,6 +530,9 @@ export default function App() {
           </div>
           <button className="logout-btn" onClick={handleLogout} title="Đăng xuất">
             <LogOut size={16} />
+          </button>
+          <button className="mobile-close-btn" onClick={() => setIsSidebarOpen(false)}>
+            <X size={20} />
           </button>
         </div>
 
@@ -636,9 +641,11 @@ export default function App() {
       </div>
 
       <div className="main-content">
-        <header className="main-header">
           <div className="header-info">
-            <MessageSquare size={20} className="text-primary" />
+            <button className="mobile-toggle-btn" onClick={() => setIsSidebarOpen(true)}>
+              <Menu size={20} />
+            </button>
+            <MessageSquare size={20} className="text-primary hide-mobile" />
             <div className="tabs-nav">
               <button className={`tab-link ${activeTab === 'chat' ? 'active' : ''}`} onClick={() => setActiveTab('chat')}>
                 Chat
@@ -654,10 +661,13 @@ export default function App() {
             </div>
           </div>
           <div className="header-actions">
-            <div className="engine-badge">
+            <div className="engine-badge hide-mobile">
               <Sparkles size={14} />
               <span>{mode.toUpperCase()} + {scope.toUpperCase()}</span>
             </div>
+            <button className="mobile-toggle-btn" onClick={() => setIsResourceOpen(true)}>
+              <Activity size={20} />
+            </button>
           </div>
         </header>
 
@@ -891,8 +901,11 @@ export default function App() {
           </div>
           
           {(activeTab === 'chat' || activeTab === 'simulate') && (
-            <div className="resource-sidebar">
+            <div className={`resource-sidebar ${isResourceOpen ? 'mobile-open' : ''}`}>
               <div className="sidebar-header">
+                <button className="mobile-close-btn" onClick={() => setIsResourceOpen(false)}>
+                  <X size={20} />
+                </button>
                 <Activity size={14} />
                 <h3>TELEMETRY</h3>
               </div>
@@ -947,6 +960,9 @@ export default function App() {
             </div>
           </div>
         </div>
+      )}
+      {(isSidebarOpen || isResourceOpen) && (
+        <div className="mobile-overlay" onClick={() => { setIsSidebarOpen(false); setIsResourceOpen(false); }}></div>
       )}
     </div>
   );
