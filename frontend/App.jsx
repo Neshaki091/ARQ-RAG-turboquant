@@ -210,64 +210,54 @@ export default function App() {
     // Cập nhật trạng thái tất cả sang pending
     setSimQueries(prev => prev.map(q => ({ ...q, status: 'pending', answer: null })));
 
-    // Gửi từng request một cách độc lập
-    const promises = simQueries.map(async (item, idx) => {
-      const qStartTime = Date.now();
-      try {
-        const res = await axios.post(`${API_BASE}/chat`, {
-          message: item.question,
-          user_id: user.id,
-          session_id: "simulation",
-          mode: mode,
-          scope: scope
-        }, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+    // Gửi MỘT request duy nhất chứa toàn bộ batch để kích hoạt cơ chế Batch Processing (không gọi LLM)
+    try {
+      const res = await axios.post(`${API_BASE}/chat`, {
+        messages_batch: simQueries.map(q => q.question),
+        user_id: user.id,
+        session_id: "simulation",
+        mode: mode,
+        scope: scope
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
-        const qEndTime = Date.now();
-        const qTotalWait = qEndTime - qStartTime;
-        const bRes = res.data;
+      const batchResults = res.data.batch_results || [];
+      
+      // Cập nhật kết quả cho toàn bộ các câu hỏi cùng lúc
+      setSimQueries(prev => prev.map((q, idx) => {
+        const bRes = batchResults[idx] || {};
+        return {
+          ...q,
+          status: 'success',
+          chunks_count: (bRes.hydrated_results || []).length,
+          chunks: bRes.hydrated_results || [],
+          complexity: bRes.complexity || "Average",
+          embed_latency: bRes.embed_latency || 0,
+          search_latency: bRes.search_latency || 0,
+          latency: (Date.now() - startTime) / simQueries.length // Độ trễ trung bình cho mỗi câu
+        };
+      }));
 
-        totalEmbed += (bRes.embed_latency || 0);
-        totalSearch += (bRes.search_latency || 0);
-        completedCount++;
+      const totalDuration = Date.now() - startTime;
+      const totalEmbed = batchResults.reduce((acc, r) => acc + (r.embed_latency || 0), 0);
+      const totalSearch = batchResults.reduce((acc, r) => acc + (r.search_latency || 0), 0);
 
-        // Cập nhật kết quả cho đúng câu hỏi này ngay khi nó xong
-        setSimQueries(prev => {
-           const newQueries = [...prev];
-           newQueries[idx] = {
-              ...newQueries[idx],
-              status: 'success',
-              chunks_count: bRes.chunks_found || 0,
-              chunks: bRes.chunks || [],
-              complexity: bRes.complexity || "Average",
-              embed_latency: bRes.embed_latency || 0,
-              search_latency: bRes.search_latency || 0,
-              latency: qTotalWait // Thời gian chờ của riêng câu hỏi này
-           };
-           return newQueries;
-        });
+      setSimResults({
+        totalTime: totalDuration,
+        avgLatency: totalDuration / simQueries.length,
+        avgEmbed: totalEmbed / simQueries.length,
+        avgSearch: totalSearch / simQueries.length,
+        throughput: (simQueries.length / (totalDuration / 1000)).toFixed(2)
+      });
 
-      } catch (err) {
-        console.error(`Query #${idx} failed:`, err);
-        setSimQueries(prev => {
-          const newQueries = [...prev];
-          newQueries[idx] = { ...newQueries[idx], status: 'error' };
-          return newQueries;
-        });
-      }
-    });
-
-    await Promise.all(promises);
+    } catch (err) {
+      console.error(`Simulation failed:`, err);
+      setSimQueries(prev => prev.map(q => ({ ...q, status: 'error' })));
+    }
     
-    const totalDuration = Date.now() - startTime;
-    setSimResults({
-      totalTime: totalDuration,
-      avgLatency: totalDuration / simQueries.length,
-      avgEmbed: totalEmbed / simQueries.length,
-      avgSearch: totalSearch / simQueries.length,
-      throughput: (simQueries.length / (totalDuration / 1000)).toFixed(2)
-    });
+    setIsSimulating(false);
+  };
     
     setIsSimulating(false);
   };
