@@ -258,9 +258,6 @@ export default function App() {
     
     setIsSimulating(false);
   };
-    
-    setIsSimulating(false);
-  };
 
   const handleCreateSession = async () => {
     const newId = `session_${Date.now()}`;
