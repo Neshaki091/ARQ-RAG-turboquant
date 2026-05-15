@@ -641,6 +641,10 @@ export default function App() {
         </div>
       </div>
 
+      {(showLeftSidebar || showRightSidebar) && (
+        <div className="sidebar-backdrop" onClick={() => { setShowLeftSidebar(false); setShowRightSidebar(false); }}></div>
+      )}
+
       <div className="main-content">
         <header className="main-header">
           <div className="header-left">
