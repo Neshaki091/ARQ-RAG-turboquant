@@ -2745,3 +2745,68 @@ body {
   align-items: center !important;
   gap: 10px !important;
 }
+
+/* --- CRITICAL MOBILE FIXES --- */
+.sidebar-backdrop {
+  z-index: 1500 !important; /* Lớp phủ nằm dưới sidebar */
+}
+
+.sidebar.open {
+  left: 0 !important;
+  z-index: 2000 !important; /* Sidebar nằm trên cùng */
+}
+
+.resource-sidebar.open {
+  right: 0 !important;
+  z-index: 2000 !important;
+}
+
+@media (max-width: 768px) {
+  body, html, #root, .app-container, .dashboard {
+    height: 100%;
+    overflow: hidden; /* Ngăn cuộn cả trang */
+  }
+
+  .main-content {
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .center-view {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0 !important;
+  }
+
+  .chat-container {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .messages-area {
+    flex: 1;
+    overflow-y: auto !important; /* Cho phép cuộn tin nhắn */
+    -webkit-overflow-scrolling: touch;
+    padding: 15px 10px !important;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .input-container {
+    background: var(--bg-card);
+    border-top: 1px solid var(--border);
+    padding: 10px !important;
+    padding-bottom: env(safe-area-inset-bottom, 10px) !important; /* Hỗ trợ tai thỏ/nút home ảo */
+  }
+
+  .main-header {
+    flex-shrink: 0;
+    height: 56px !important;
+  }
+}
